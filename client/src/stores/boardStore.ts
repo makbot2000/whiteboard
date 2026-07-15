@@ -9,6 +9,7 @@ interface BoardStore {
   columns: Column[];
   groups: Group[];
   loading: boolean;
+  fitAllRequest: number;
 
   fetchBoards: () => Promise<void>;
   createBoard: (name: string) => Promise<void>;
@@ -17,6 +18,7 @@ interface BoardStore {
   deleteBoard: (id: string) => Promise<void>;
 
   fetchBoardData: (boardId: string) => Promise<void>;
+  requestFitAll: () => void;
 
   createNote: (data: Partial<Note>) => Promise<Note>;
   updateNote: (id: string, data: Partial<Note>) => Promise<void>;
@@ -27,6 +29,9 @@ interface BoardStore {
 
   createColumn: (data: Partial<Column>) => Promise<void>;
   updateColumn: (id: string, data: Partial<Column>) => Promise<void>;
+  previewColumnPositions: (updates: Array<Pick<Column, 'id' | 'x' | 'y'>>) => void;
+  saveColumnPositions: (updates: Array<Pick<Column, 'id' | 'x' | 'y'>>) => Promise<void>;
+  setColumnLinkGroups: (updates: Array<Pick<Column, 'id' | 'link_group_id'>>) => Promise<void>;
   deleteColumn: (id: string) => Promise<void>;
 
   createGroup: (data: Partial<Group>) => Promise<void>;
@@ -41,6 +46,7 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   columns: [],
   groups: [],
   loading: false,
+  fitAllRequest: 0,
 
   fetchBoards: async () => {
     const boards = await api.boards.list();
@@ -89,6 +95,10 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       api.groups.list(boardId),
     ]);
     set({ notes, columns, groups });
+  },
+
+  requestFitAll: () => {
+    set((s) => ({ fitAllRequest: s.fitAllRequest + 1 }));
   },
 
   createNote: async (data: Partial<Note>) => {
@@ -143,6 +153,33 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
           : current
       ),
     }));
+  },
+
+  previewColumnPositions: (updates) => {
+    const positions = new Map(updates.map((update) => [update.id, update]));
+    set((s) => ({
+      columns: s.columns.map((column) => {
+        const position = positions.get(column.id);
+        return position ? { ...column, x: position.x, y: position.y } : column;
+      }),
+    }));
+  },
+
+  saveColumnPositions: async (updates) => {
+    get().previewColumnPositions(updates);
+    await api.columns.batchPositions(updates);
+  },
+
+  setColumnLinkGroups: async (updates) => {
+    const linkGroups = new Map(updates.map((update) => [update.id, update.link_group_id]));
+    set((s) => ({
+      columns: s.columns.map((column) =>
+        linkGroups.has(column.id)
+          ? { ...column, link_group_id: linkGroups.get(column.id) ?? null }
+          : column
+      ),
+    }));
+    await api.columns.batchLinks(updates);
   },
 
   deleteColumn: async (id: string) => {

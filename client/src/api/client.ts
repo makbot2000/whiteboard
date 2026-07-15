@@ -31,6 +31,8 @@ export const api = {
     list: (boardId: string) => request(`/columns?board_id=${boardId}`),
     create: (data: any) => request('/columns', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) => request(`/columns/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    batchPositions: (updates: any[]) => request('/columns/batch/positions', { method: 'PUT', body: JSON.stringify({ updates }) }),
+    batchLinks: (updates: any[]) => request('/columns/batch/links', { method: 'PUT', body: JSON.stringify({ updates }) }),
     delete: (id: string) => request(`/columns/${id}`, { method: 'DELETE' }),
   },
   groups: {

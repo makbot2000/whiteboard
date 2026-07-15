@@ -2,7 +2,18 @@ import { useState } from 'react';
 import { useBoardStore } from '../stores/boardStore';
 
 export default function Toolbar() {
-  const { activeBoard, createNote, createColumn, createGroup, groups, notes, columns, updateNote, updateColumn, batchUpdatePositions } = useBoardStore();
+  const {
+    activeBoard,
+    createNote,
+    createColumn,
+    createGroup,
+    groups,
+    notes,
+    columns,
+    updateNote,
+    updateColumn,
+    requestFitAll,
+  } = useBoardStore();
   const [showGroupPanel, setShowGroupPanel] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupColor, setNewGroupColor] = useState('#6366f1');
@@ -127,57 +138,6 @@ export default function Toolbar() {
     });
   };
 
-  // Fit all notes to their content and center everything
-  const handleFitAll = () => {
-    // Fit each note to its content
-    const allNoteEls = document.querySelectorAll('[data-note-id]');
-    allNoteEls.forEach((el) => {
-      const noteId = el.getAttribute('data-note-id');
-      if (!noteId) return;
-      const tiptapEl = el.querySelector('.tiptap');
-      if (tiptapEl) {
-        const newHeight = Math.max(100, tiptapEl.scrollHeight + 90);
-        updateNote(noteId, { height: newHeight });
-      }
-    });
-
-    // After a short delay (let heights update), center everything
-    setTimeout(() => {
-      const freeformNotes = notes.filter((n) => !n.column_id);
-      if (freeformNotes.length === 0 && columns.length === 0) return;
-
-      // Find bounding box of all content
-      let minX = Infinity, minY = Infinity;
-      let maxX = -Infinity, maxY = -Infinity;
-
-      for (const note of freeformNotes) {
-        minX = Math.min(minX, note.x);
-        minY = Math.min(minY, note.y);
-        maxX = Math.max(maxX, note.x + note.width);
-        maxY = Math.max(maxY, note.y + note.height);
-      }
-      for (const col of columns) {
-        minX = Math.min(minX, col.x);
-        minY = Math.min(minY, col.y);
-        maxX = Math.max(maxX, col.x + col.width);
-        maxY = Math.max(maxY, col.y + (col.height || 400));
-      }
-
-      // Shift everything so it starts at (50, 50)
-      const offsetX = 50 - minX;
-      const offsetY = 50 - minY;
-
-      if (offsetX !== 0 || offsetY !== 0) {
-        freeformNotes.forEach((note) => {
-          updateNote(note.id, { x: note.x + offsetX, y: note.y + offsetY });
-        });
-        columns.forEach((col) => {
-          updateColumn(col.id, { x: col.x + offsetX, y: col.y + offsetY });
-        });
-      }
-    }, 100);
-  };
-
   const COLORS = ['#6366f1', '#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#06b6d4'];
 
   return (
@@ -204,8 +164,8 @@ export default function Toolbar() {
         </button>
         <button
           className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm shadow-md"
-          onClick={handleFitAll}
-          title="Fit all notes to content and center everything"
+          onClick={requestFitAll}
+          title="Zoom and center the canvas to show all content"
         >
           Fit All
         </button>

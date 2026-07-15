@@ -8,7 +8,17 @@ interface Props {
 }
 
 export default function ColumnContainer({ column }: Props) {
-  const { notes, updateColumn, deleteColumn, createNote, updateNote } = useBoardStore();
+  const {
+    notes,
+    columns,
+    updateColumn,
+    previewColumnPositions,
+    saveColumnPositions,
+    setColumnLinkGroups,
+    deleteColumn,
+    createNote,
+    updateNote,
+  } = useBoardStore();
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [position, setPosition] = useState({ x: column.x, y: column.y });
@@ -16,7 +26,12 @@ export default function ColumnContainer({ column }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(column.name);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const dragStart = useRef({ x: 0, y: 0, colX: 0, colY: 0 });
+  const dragStart = useRef<{
+    x: number;
+    y: number;
+    members: Array<Pick<Column, 'id' | 'x' | 'y'>>;
+  }>({ x: 0, y: 0, members: [] });
+  const dragDelta = useRef({ x: 0, y: 0 });
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
   const columnRef = useRef<HTMLDivElement>(null);
 
@@ -53,25 +68,41 @@ export default function ColumnContainer({ column }: Props) {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
-    dragStart.current = { x: e.clientX, y: e.clientY, colX: position.x, colY: position.y };
+    const linkedMembers = column.link_group_id
+      ? columns.filter((item) => item.link_group_id === column.link_group_id)
+      : [column];
+    dragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      members: linkedMembers.map((item) => ({ id: item.id, x: item.x, y: item.y })),
+    };
+    dragDelta.current = { x: 0, y: 0 };
 
     const trackMove = (ev: MouseEvent) => {
-      (window as any)._lastColDragX = ev.clientX - dragStart.current.x;
-      (window as any)._lastColDragY = ev.clientY - dragStart.current.y;
-      setPosition({
-        x: dragStart.current.colX + (ev.clientX - dragStart.current.x),
-        y: dragStart.current.colY + (ev.clientY - dragStart.current.y),
-      });
+      dragDelta.current = {
+        x: ev.clientX - dragStart.current.x,
+        y: ev.clientY - dragStart.current.y,
+      };
+      previewColumnPositions(
+        dragStart.current.members.map((member) => ({
+          id: member.id,
+          x: member.x + dragDelta.current.x,
+          y: member.y + dragDelta.current.y,
+        }))
+      );
     };
 
     document.addEventListener('mousemove', trackMove);
     document.addEventListener('mouseup', () => {
       setIsDragging(false);
       document.removeEventListener('mousemove', trackMove);
-      const finalX = dragStart.current.colX + ((window as any)._lastColDragX || 0);
-      const finalY = dragStart.current.colY + ((window as any)._lastColDragY || 0);
-      setPosition({ x: finalX, y: finalY });
-      updateColumn(column.id, { x: finalX, y: finalY });
+      saveColumnPositions(
+        dragStart.current.members.map((member) => ({
+          id: member.id,
+          x: member.x + dragDelta.current.x,
+          y: member.y + dragDelta.current.y,
+        }))
+      );
     }, { once: true });
   };
 
@@ -135,6 +166,48 @@ export default function ColumnContainer({ column }: Props) {
       layout_mode: 'grid',
       grid_columns: gridColumns,
     });
+  };
+
+  const handleLinkChange = (value: string) => {
+    const currentMembers = column.link_group_id
+      ? columns.filter((item) => item.link_group_id === column.link_group_id)
+      : [column];
+
+    if (value === 'unlinked') {
+      const updates: Array<Pick<Column, 'id' | 'link_group_id'>> = [
+        { id: column.id, link_group_id: null },
+      ];
+      const remainingMembers = currentMembers.filter((item) => item.id !== column.id);
+      if (remainingMembers.length === 1) {
+        updates.push({ id: remainingMembers[0].id, link_group_id: null });
+      }
+      setColumnLinkGroups(updates);
+      return;
+    }
+
+    if (value === 'all') {
+      const groupId = column.link_group_id || crypto.randomUUID();
+      setColumnLinkGroups(
+        columns.map((item) => ({ id: item.id, link_group_id: groupId }))
+      );
+      return;
+    }
+
+    const targetId = value.replace('column:', '');
+    const target = columns.find((item) => item.id === targetId);
+    if (!target) return;
+
+    const targetMembers = target.link_group_id
+      ? columns.filter((item) => item.link_group_id === target.link_group_id)
+      : [target];
+    const groupId = target.link_group_id || column.link_group_id || crypto.randomUUID();
+    const memberIds = new Set([
+      ...currentMembers.map((item) => item.id),
+      ...targetMembers.map((item) => item.id),
+    ]);
+    setColumnLinkGroups(
+      Array.from(memberIds, (id) => ({ id, link_group_id: groupId }))
+    );
   };
 
   // Fit column to its content
@@ -241,10 +314,17 @@ export default function ColumnContainer({ column }: Props) {
 
   const layoutMode = column.layout_mode || 'freeform';
   const gridCols = column.grid_columns || 1;
+  const linkedCount = column.link_group_id
+    ? columns.filter((item) => item.link_group_id === column.link_group_id).length
+    : 0;
+  const linkSelectValue = column.link_group_id
+    ? `linked:${column.link_group_id}`
+    : 'unlinked';
 
   return (
     <div
       ref={columnRef}
+      data-column-id={column.id}
       className={`absolute flex flex-col border border-gray-300 dark:border-gray-600 rounded-lg ${
         isDragging ? 'opacity-80 shadow-xl z-50' : 'z-20'
       } ${isResizing ? 'select-none' : ''}`}
@@ -260,7 +340,7 @@ export default function ColumnContainer({ column }: Props) {
     >
       {/* Column header */}
       <div
-        className="column-header flex items-center gap-2 px-3 py-2 border-b border-gray-300 dark:border-gray-600 cursor-move select-none bg-gray-200 dark:bg-gray-700 rounded-t-lg"
+        className="column-header flex flex-wrap items-center gap-2 px-3 py-2 border-b border-gray-300 dark:border-gray-600 cursor-move select-none bg-gray-200 dark:bg-gray-700 rounded-t-lg"
         onMouseDown={handleDragStart}
       >
         {isEditing ? (
@@ -293,6 +373,30 @@ export default function ColumnContainer({ column }: Props) {
         >
           Fit
         </button>
+
+        {/* Link columns into a movement group */}
+        <select
+          className="text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-1 py-0.5 cursor-pointer"
+          value={linkSelectValue}
+          onChange={(e) => handleLinkChange(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          title="Link columns so they move together"
+        >
+          {column.link_group_id ? (
+            <option value={linkSelectValue}>Linked ({linkedCount})</option>
+          ) : (
+            <option value="unlinked">Link: Off</option>
+          )}
+          {column.link_group_id && <option value="unlinked">Unlink this</option>}
+          <option value="all">Link all</option>
+          {columns
+            .filter((item) => item.id !== column.id)
+            .map((item) => (
+              <option key={item.id} value={`column:${item.id}`}>
+                Link: {item.name}
+              </option>
+            ))}
+        </select>
 
         {/* Align button */}
         <button

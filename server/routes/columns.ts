@@ -24,14 +24,50 @@ router.post('/', (req, res) => {
   res.status(201).json(column);
 });
 
+// Save a linked group after a drag without issuing one request per column.
+router.put('/batch/positions', (req, res) => {
+  const { updates } = req.body;
+  if (!Array.isArray(updates)) return res.status(400).json({ error: 'updates array required' });
+
+  const stmt = db.prepare(`
+    UPDATE columns SET x = ?, y = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `);
+  db.transaction(() => {
+    for (const update of updates) {
+      stmt.run(update.x, update.y, update.id);
+    }
+  })();
+
+  res.json({ success: true });
+});
+
+// Link or unlink several columns as one operation.
+router.put('/batch/links', (req, res) => {
+  const { updates } = req.body;
+  if (!Array.isArray(updates)) return res.status(400).json({ error: 'updates array required' });
+
+  const stmt = db.prepare(`
+    UPDATE columns SET link_group_id = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `);
+  db.transaction(() => {
+    for (const update of updates) {
+      stmt.run(update.link_group_id ?? null, update.id);
+    }
+  })();
+
+  res.json({ success: true });
+});
+
 // Update a column
 router.put('/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM columns WHERE id = ?').get(req.params.id) as any;
   if (!existing) return res.status(404).json({ error: 'Column not found' });
 
-  const { name, x, y, width, height, layout_mode, grid_columns, sort_by, sort_order } = req.body;
+  const { name, x, y, width, height, layout_mode, grid_columns, link_group_id, sort_by, sort_order } = req.body;
   const stmt = db.prepare(`
-    UPDATE columns SET name = ?, x = ?, y = ?, width = ?, height = ?, layout_mode = ?, grid_columns = ?, sort_by = ?, sort_order = ?, updated_at = datetime('now')
+    UPDATE columns SET name = ?, x = ?, y = ?, width = ?, height = ?, layout_mode = ?, grid_columns = ?, link_group_id = ?, sort_by = ?, sort_order = ?, updated_at = datetime('now')
     WHERE id = ?
   `);
   stmt.run(
@@ -42,6 +78,7 @@ router.put('/:id', (req, res) => {
     height ?? existing.height,
     layout_mode ?? existing.layout_mode,
     grid_columns ?? existing.grid_columns,
+    link_group_id !== undefined ? link_group_id : existing.link_group_id,
     sort_by ?? existing.sort_by,
     sort_order ?? existing.sort_order,
     req.params.id

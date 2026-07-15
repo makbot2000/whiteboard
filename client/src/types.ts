@@ -35,6 +35,7 @@ export interface Column {
   height: number;
   layout_mode: string;
   grid_columns: number;
+  link_group_id: string | null;
   sort_by: string;
   sort_order: string;
   created_at: string;

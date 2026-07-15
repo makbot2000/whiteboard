@@ -4,7 +4,15 @@ import NoteCard from './NoteCard';
 import ColumnContainer from './ColumnContainer';
 
 export default function Canvas() {
-  const { activeBoard, notes, columns, updateBoard, createNote, updateNote } = useBoardStore();
+  const {
+    activeBoard,
+    notes,
+    columns,
+    fitAllRequest,
+    updateBoard,
+    createNote,
+    updateNote,
+  } = useBoardStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -35,6 +43,81 @@ export default function Canvas() {
     [activeBoard, updateBoard]
   );
 
+  // Fit every top-level canvas element into the visible viewport.
+  useEffect(() => {
+    if (fitAllRequest === 0 || !containerRef.current || !activeBoard) return;
+
+    const freeformNotes = notes.filter((note) => !note.column_id);
+    const renderedColumns = new Map(
+      Array.from(
+        containerRef.current.querySelectorAll<HTMLElement>('[data-column-id]'),
+        (element) => [element.dataset.columnId, element],
+      ),
+    );
+    const renderedNotes = new Map(
+      Array.from(
+        containerRef.current.querySelectorAll<HTMLElement>('[data-note-id]'),
+        (element) => [element.dataset.noteId, element],
+      ),
+    );
+    const elements = [
+      ...columns.map((column) => {
+        const rendered = renderedColumns.get(column.id);
+        return {
+          x: column.x,
+          y: column.y,
+          width: rendered?.offsetWidth || column.width,
+          height: rendered?.offsetHeight || column.height || 400,
+        };
+      }),
+      ...freeformNotes.map((note) => {
+        const rendered = renderedNotes.get(note.id);
+        return {
+          x: note.x,
+          y: note.y,
+          width: rendered?.offsetWidth || note.width,
+          height: rendered?.offsetHeight || note.height,
+        };
+      }),
+    ];
+
+    if (elements.length === 0) {
+      const resetPan = { x: 0, y: 0 };
+      setPan(resetPan);
+      setZoom(1);
+      savePanZoom(resetPan, 1);
+      return;
+    }
+
+    const minX = Math.min(...elements.map((element) => element.x));
+    const minY = Math.min(...elements.map((element) => element.y));
+    const maxX = Math.max(...elements.map((element) => element.x + element.width));
+    const maxY = Math.max(...elements.map((element) => element.y + element.height));
+    const boundsWidth = Math.max(1, maxX - minX);
+    const boundsHeight = Math.max(1, maxY - minY);
+    const viewport = containerRef.current.getBoundingClientRect();
+    const padding = 48;
+    const toolbarClearance = 52;
+    const availableWidth = Math.max(1, viewport.width - padding * 2);
+    const availableHeight = Math.max(1, viewport.height - toolbarClearance - padding * 2);
+    const nextZoom = Math.max(
+      0.05,
+      Math.min(1, availableWidth / boundsWidth, availableHeight / boundsHeight),
+    );
+    const contentCenterX = minX + boundsWidth / 2;
+    const contentCenterY = minY + boundsHeight / 2;
+    const screenCenterX = viewport.width / 2;
+    const screenCenterY = toolbarClearance + (viewport.height - toolbarClearance) / 2;
+    const nextPan = {
+      x: screenCenterX - contentCenterX * nextZoom,
+      y: screenCenterY - contentCenterY * nextZoom,
+    };
+
+    setZoom(nextZoom);
+    setPan(nextPan);
+    savePanZoom(nextPan, nextZoom);
+  }, [fitAllRequest]);
+
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = (screenX: number, screenY: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -51,7 +134,7 @@ export default function Canvas() {
       if (e.ctrlKey || e.metaKey || e.shiftKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        const newZoom = Math.max(0.2, Math.min(3, zoom * delta));
+        const newZoom = Math.max(0.05, Math.min(3, zoom * delta));
         setZoom(newZoom);
         savePanZoom(pan, newZoom);
       } else {

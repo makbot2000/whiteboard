@@ -47,6 +47,7 @@ db.exec(`
     height REAL DEFAULT 400,
     layout_mode TEXT DEFAULT 'freeform',
     grid_columns INTEGER DEFAULT 1,
+    link_group_id TEXT,
     sort_by TEXT DEFAULT 'manual',
     sort_order TEXT DEFAULT 'asc',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -82,4 +83,7 @@ try {
 } catch (e) { /* column already exists */ }
 try {
   db.exec(`ALTER TABLE columns ADD COLUMN grid_columns INTEGER DEFAULT 1`);
+} catch (e) { /* column already exists */ }
+try {
+  db.exec(`ALTER TABLE columns ADD COLUMN link_group_id TEXT`);
 } catch (e) { /* column already exists */ }
