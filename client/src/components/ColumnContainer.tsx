@@ -124,44 +124,57 @@ export default function ColumnContainer({ column }: Props) {
     updateColumn(column.id, { sort_order: column.sort_order === 'asc' ? 'desc' : 'asc' });
   };
 
-  const handleLayoutChange = (mode: string) => {
-    updateColumn(column.id, { layout_mode: mode });
-  };
+  const handleLayoutChange = (value: string) => {
+    if (value === 'freeform') {
+      updateColumn(column.id, { layout_mode: 'freeform' });
+      return;
+    }
 
-  const handleGridColumnsChange = (num: number) => {
-    updateColumn(column.id, { grid_columns: Math.max(1, Math.min(5, num)) });
+    const gridColumns = Math.max(2, Math.min(5, Number(value.split('-')[1])));
+    updateColumn(column.id, {
+      layout_mode: 'grid',
+      grid_columns: gridColumns,
+    });
   };
 
   // Fit column to its content
   const handleFitToContent = () => {
     if (columnNotes.length === 0) return;
 
+    const headerHeight = columnRef.current?.querySelector<HTMLElement>('.column-header')?.offsetHeight ?? 42;
+    const contentPadding = 16;
+    const borderHeight = 2;
+
     if (layoutMode === 'freeform') {
-      // Find bounding box of all notes
       let maxX = 0;
       let maxY = 0;
       for (const note of columnNotes) {
         maxX = Math.max(maxX, note.x + note.width);
         maxY = Math.max(maxY, note.y + note.height);
       }
-      setSize({ width: Math.max(200, maxX + 20), height: Math.max(150, maxY + 20) });
-      updateColumn(column.id, { width: Math.max(200, maxX + 20), height: Math.max(150, maxY + 20) });
+
+      const fittedSize = {
+        width: Math.max(200, maxX + contentPadding),
+        height: Math.max(150, headerHeight + maxY + contentPadding + borderHeight),
+      };
+      setSize(fittedSize);
+      updateColumn(column.id, fittedSize);
     } else {
-      // For grid mode, measure the rendered content
-      const contentEl = columnRef.current?.querySelector('.column-content');
-      if (contentEl) {
-        const newHeight = Math.max(150, contentEl.scrollHeight + 60); // header + padding
-        setSize({ ...size, height: newHeight });
-        updateColumn(column.id, { height: newHeight });
-      } else {
-        // Estimate height based on note heights
-        const padding = 10;
-        const rows = Math.ceil(columnNotes.length / gridCols);
-        const avgHeight = columnNotes.reduce((sum, n) => sum + n.height, 0) / columnNotes.length;
-        const estHeight = rows * (avgHeight + padding) + 60;
-        setSize({ ...size, height: Math.max(150, estHeight) });
-        updateColumn(column.id, { height: Math.max(150, estHeight) });
+      const rowGap = 8;
+      let gridHeight = 0;
+
+      for (let index = 0; index < columnNotes.length; index += gridCols) {
+        const row = columnNotes.slice(index, index + gridCols);
+        gridHeight += Math.max(...row.map((note) => note.height));
+        if (index + gridCols < columnNotes.length) gridHeight += rowGap;
       }
+
+      const newHeight = Math.max(
+        150,
+        headerHeight + contentPadding + gridHeight + borderHeight,
+      );
+      setSize((current) => ({ ...current, height: newHeight }));
+      updateColumn(column.id, { height: newHeight });
     }
   };
 
@@ -247,7 +260,7 @@ export default function ColumnContainer({ column }: Props) {
     >
       {/* Column header */}
       <div
-        className="flex items-center gap-2 px-3 py-2 border-b border-gray-300 dark:border-gray-600 cursor-move select-none bg-gray-200 dark:bg-gray-700 rounded-t-lg"
+        className="column-header flex items-center gap-2 px-3 py-2 border-b border-gray-300 dark:border-gray-600 cursor-move select-none bg-gray-200 dark:bg-gray-700 rounded-t-lg"
         onMouseDown={handleDragStart}
       >
         {isEditing ? (
@@ -294,17 +307,7 @@ export default function ColumnContainer({ column }: Props) {
         <select
           className="text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-1 py-0.5 cursor-pointer"
           value={layoutMode === 'grid' ? `grid-${gridCols}` : 'freeform'}
-          onChange={(e) => {
-            e.stopPropagation();
-            const val = e.target.value;
-            if (val === 'freeform') {
-              handleLayoutChange('freeform');
-            } else {
-              const cols = parseInt(val.split('-')[1]);
-              handleLayoutChange('grid');
-              handleGridColumnsChange(cols);
-            }
-          }}
+          onChange={(e) => handleLayoutChange(e.target.value)}
           onClick={(e) => e.stopPropagation()}
           title="Layout mode"
         >
