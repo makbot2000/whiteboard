@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useBoardStore } from '../stores/boardStore';
 import type { Note } from '../types';
+import { getSnapDelta } from '../utils/snap';
 import NoteEditor from './NoteEditor';
 
 interface Props {
@@ -8,10 +9,17 @@ interface Props {
   inColumn?: boolean;
   inFreeformColumn?: boolean;
   inGridColumn?: boolean;
+  zoom?: number;
 }
 
-export default function NoteCard({ note, inColumn = false, inFreeformColumn = false, inGridColumn = false }: Props) {
-  const { updateNote, deleteNote, groups, columns, boards, activeBoard, copyNote, moveNote } = useBoardStore();
+export default function NoteCard({
+  note,
+  inColumn = false,
+  inFreeformColumn = false,
+  inGridColumn = false,
+  zoom = 1,
+}: Props) {
+  const { notes, updateNote, deleteNote, groups, columns, boards, activeBoard, copyNote, moveNote } = useBoardStore();
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [position, setPosition] = useState({ x: note.x, y: note.y });
@@ -38,14 +46,39 @@ export default function NoteCard({ note, inColumn = false, inFreeformColumn = fa
     e.stopPropagation();
     setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY, noteX: position.x, noteY: position.y };
+    (window as any)._lastDragX = 0;
+    (window as any)._lastDragY = 0;
 
     const trackMove = (ev: MouseEvent) => {
-      (window as any)._lastDragX = ev.clientX - dragStart.current.x;
-      (window as any)._lastDragY = ev.clientY - dragStart.current.y;
-      setPosition({
-        x: dragStart.current.noteX + (ev.clientX - dragStart.current.x),
-        y: dragStart.current.noteY + (ev.clientY - dragStart.current.y),
-      });
+      const rawPosition = {
+        x: dragStart.current.noteX + (ev.clientX - dragStart.current.x) / zoom,
+        y: dragStart.current.noteY + (ev.clientY - dragStart.current.y) / zoom,
+      };
+      const peers = notes
+        .filter((item) =>
+          item.id !== note.id &&
+          (inFreeformColumn
+            ? item.column_id === note.column_id
+            : item.column_id === null)
+        )
+        .map((item) => ({
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+        }));
+      const snap = getSnapDelta(
+        { ...rawPosition, width: size.width, height: size.height },
+        peers,
+        12 / zoom,
+      );
+      const nextPosition = {
+        x: rawPosition.x + snap.x,
+        y: rawPosition.y + snap.y,
+      };
+      (window as any)._lastDragX = nextPosition.x - dragStart.current.noteX;
+      (window as any)._lastDragY = nextPosition.y - dragStart.current.noteY;
+      setPosition(nextPosition);
     };
 
     document.addEventListener('mousemove', trackMove);
@@ -57,8 +90,8 @@ export default function NoteCard({ note, inColumn = false, inFreeformColumn = fa
       setPosition({ x: finalX, y: finalY });
       updateNote(note.id, { x: finalX, y: finalY });
 
-      // Check if dropped over a column
-      checkDropOnColumn(finalX, finalY);
+      // Only top-level notes use canvas coordinates for column hit testing.
+      if (!inColumn) checkDropOnColumn(finalX, finalY);
     }, { once: true });
   };
 
@@ -163,6 +196,17 @@ export default function NoteCard({ note, inColumn = false, inFreeformColumn = fa
   // Find group color
   const group = groups.find((g) => g.id === note.group_id);
   const borderColor = group ? group.color : undefined;
+  const groupTitleTextColor = (() => {
+    if (!group?.color) return undefined;
+    const hex = group.color.replace('#', '');
+    if (!/^[0-9a-f]{6}$/i.test(hex)) return '#ffffff';
+    const red = parseInt(hex.slice(0, 2), 16);
+    const green = parseInt(hex.slice(2, 4), 16);
+    const blue = parseInt(hex.slice(4, 6), 16);
+    return (red * 299 + green * 587 + blue * 114) / 1000 > 150
+      ? '#111827'
+      : '#ffffff';
+  })();
 
   const isInColumn = !!note.column_id;
 
@@ -190,16 +234,28 @@ export default function NoteCard({ note, inColumn = false, inFreeformColumn = fa
     >
       {/* Title bar / drag handle - tall and easy to grab */}
       <div
-        className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 select-none shrink-0 cursor-move bg-gray-50 dark:bg-gray-750 rounded-t-lg"
+        className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 select-none shrink-0 cursor-move bg-gray-50 dark:bg-gray-700 rounded-t-md"
+        style={group ? {
+          backgroundColor: group.color,
+          borderBottomColor: group.color,
+          color: groupTitleTextColor,
+        } : undefined}
         onMouseDown={handleDragStart}
       >
         <div className="w-4 shrink-0 flex flex-col gap-[2px] opacity-40">
-          <div className="h-[2px] bg-gray-400 rounded" />
-          <div className="h-[2px] bg-gray-400 rounded" />
-          <div className="h-[2px] bg-gray-400 rounded" />
+          <div className="h-[2px] bg-gray-400 rounded" style={group ? { backgroundColor: groupTitleTextColor } : undefined} />
+          <div className="h-[2px] bg-gray-400 rounded" style={group ? { backgroundColor: groupTitleTextColor } : undefined} />
+          <div className="h-[2px] bg-gray-400 rounded" style={group ? { backgroundColor: groupTitleTextColor } : undefined} />
         </div>
         <input
-          className="flex-1 bg-transparent text-sm font-medium outline-none placeholder-gray-400 text-gray-900 dark:text-gray-100 cursor-text"
+          className={`flex-1 bg-transparent text-sm font-medium outline-none text-gray-900 dark:text-gray-100 cursor-text ${
+            group
+              ? groupTitleTextColor === '#ffffff'
+                ? 'placeholder-white/70'
+                : 'placeholder-black/50'
+              : 'placeholder-gray-400'
+          }`}
+          style={group ? { color: groupTitleTextColor } : undefined}
           value={note.title}
           placeholder="Untitled"
           onChange={(e) => {
@@ -210,6 +266,7 @@ export default function NoteCard({ note, inColumn = false, inFreeformColumn = fa
         />
         <button
           className="text-gray-400 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400 text-sm px-1"
+          style={group ? { color: groupTitleTextColor } : undefined}
           onClick={(e) => { e.stopPropagation(); handleFitToContent(); }}
           onMouseDown={(e) => e.stopPropagation()}
           title="Fit to content"
@@ -218,6 +275,7 @@ export default function NoteCard({ note, inColumn = false, inFreeformColumn = fa
         </button>
         <button
           className="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 text-xs px-1"
+          style={group ? { color: groupTitleTextColor } : undefined}
           onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
           onMouseDown={(e) => e.stopPropagation()}
         >

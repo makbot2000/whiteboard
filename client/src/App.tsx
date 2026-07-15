@@ -15,6 +15,18 @@ export default function App() {
   useEffect(() => {
     init();
     fetchBoards();
+
+    const preventBrowserZoom = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) event.preventDefault();
+    };
+    window.addEventListener('wheel', preventBrowserZoom, {
+      capture: true,
+      passive: false,
+    });
+
+    return () => {
+      window.removeEventListener('wheel', preventBrowserZoom, { capture: true });
+    };
   }, []);
 
   return (

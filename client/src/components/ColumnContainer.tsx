@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { useBoardStore } from '../stores/boardStore';
 import type { Column } from '../types';
+import { getSnapDelta } from '../utils/snap';
 import NoteCard from './NoteCard';
 
 interface Props {
   column: Column;
+  zoom: number;
 }
 
-export default function ColumnContainer({ column }: Props) {
+export default function ColumnContainer({ column, zoom }: Props) {
   const {
     notes,
     columns,
@@ -29,7 +31,7 @@ export default function ColumnContainer({ column }: Props) {
   const dragStart = useRef<{
     x: number;
     y: number;
-    members: Array<Pick<Column, 'id' | 'x' | 'y'>>;
+    members: Array<Pick<Column, 'id' | 'x' | 'y' | 'width' | 'height'>>;
   }>({ x: 0, y: 0, members: [] });
   const dragDelta = useRef({ x: 0, y: 0 });
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
@@ -74,14 +76,46 @@ export default function ColumnContainer({ column }: Props) {
     dragStart.current = {
       x: e.clientX,
       y: e.clientY,
-      members: linkedMembers.map((item) => ({ id: item.id, x: item.x, y: item.y })),
+      members: linkedMembers.map((item) => ({
+        id: item.id,
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height || 400,
+      })),
     };
     dragDelta.current = { x: 0, y: 0 };
 
     const trackMove = (ev: MouseEvent) => {
+      const rawDelta = {
+        x: (ev.clientX - dragStart.current.x) / zoom,
+        y: (ev.clientY - dragStart.current.y) / zoom,
+      };
+      const memberIds = new Set(dragStart.current.members.map((member) => member.id));
+      const minX = Math.min(...dragStart.current.members.map((item) => item.x));
+      const minY = Math.min(...dragStart.current.members.map((item) => item.y));
+      const maxX = Math.max(...dragStart.current.members.map((item) => item.x + item.width));
+      const maxY = Math.max(...dragStart.current.members.map((item) => item.y + item.height));
+      const snap = getSnapDelta(
+        {
+          x: minX + rawDelta.x,
+          y: minY + rawDelta.y,
+          width: maxX - minX,
+          height: maxY - minY,
+        },
+        columns
+          .filter((item) => !memberIds.has(item.id))
+          .map((item) => ({
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height || 400,
+          })),
+        12 / zoom,
+      );
       dragDelta.current = {
-        x: ev.clientX - dragStart.current.x,
-        y: ev.clientY - dragStart.current.y,
+        x: rawDelta.x + snap.x,
+        y: rawDelta.y + snap.y,
       };
       previewColumnPositions(
         dragStart.current.members.map((member) => ({
@@ -478,7 +512,7 @@ export default function ColumnContainer({ column }: Props) {
         )}
         {layoutMode === 'freeform' ? (
           columnNotes.map((note) => (
-            <NoteCard key={note.id} note={note} inColumn inFreeformColumn />
+            <NoteCard key={note.id} note={note} inColumn inFreeformColumn zoom={zoom} />
           ))
         ) : layoutMode === 'grid' ? (
           <div
@@ -490,7 +524,7 @@ export default function ColumnContainer({ column }: Props) {
                 {dragOverIndex === index && (
                   <div className="h-1 bg-blue-500 rounded-full mb-1" />
                 )}
-                <NoteCard note={note} inColumn inGridColumn />
+                <NoteCard note={note} inColumn inGridColumn zoom={zoom} />
               </div>
             ))}
             {dragOverIndex !== null && dragOverIndex >= columnNotes.length && (
@@ -504,7 +538,7 @@ export default function ColumnContainer({ column }: Props) {
                 {dragOverIndex === index && (
                   <div className="h-1 bg-blue-500 rounded-full mb-1" />
                 )}
-                <NoteCard note={note} inColumn />
+                <NoteCard note={note} inColumn zoom={zoom} />
               </div>
             ))}
             {dragOverIndex !== null && dragOverIndex >= columnNotes.length && (

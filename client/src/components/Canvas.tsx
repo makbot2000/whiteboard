@@ -20,6 +20,16 @@ export default function Canvas() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawRect, setDrawRect] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
+
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   // Load saved pan/zoom from board
   useEffect(() => {
@@ -128,32 +138,56 @@ export default function Canvas() {
     };
   };
 
-  // Mouse wheel zoom
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      if (e.ctrlKey || e.metaKey || e.shiftKey) {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        const newZoom = Math.max(0.05, Math.min(3, zoom * delta));
-        setZoom(newZoom);
-        savePanZoom(pan, newZoom);
-      } else {
-        // Pan with scroll
-        const newPan = { x: pan.x - e.deltaX, y: pan.y - e.deltaY };
-        setPan(newPan);
-        savePanZoom(newPan, zoom);
+  // A native non-passive listener is required to stop browser Ctrl+wheel zoom.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+
+      const currentPan = panRef.current;
+      const currentZoom = zoomRef.current;
+
+      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        const rect = container.getBoundingClientRect();
+        const canvasX = (event.clientX - rect.left - currentPan.x) / currentZoom;
+        const canvasY = (event.clientY - rect.top - currentPan.y) / currentZoom;
+        const factor = event.deltaY > 0 ? 0.9 : 1.1;
+        const nextZoom = Math.max(0.05, Math.min(3, currentZoom * factor));
+        const nextPan = {
+          x: event.clientX - rect.left - canvasX * nextZoom,
+          y: event.clientY - rect.top - canvasY * nextZoom,
+        };
+
+        zoomRef.current = nextZoom;
+        panRef.current = nextPan;
+        setZoom(nextZoom);
+        setPan(nextPan);
+        savePanZoom(nextPan, nextZoom);
+        return;
       }
-    },
-    [zoom, pan, savePanZoom]
-  );
+
+      const nextPan = {
+        x: currentPan.x - event.deltaX,
+        y: currentPan.y - event.deltaY,
+      };
+      panRef.current = nextPan;
+      setPan(nextPan);
+      savePanZoom(nextPan, currentZoom);
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [savePanZoom]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       // Only act on clicks directly on the canvas background (the container div)
       if (e.target !== containerRef.current) return;
 
-      // Ctrl+click or middle mouse: PAN
-      if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
+      // Shift+left-drag or middle mouse: pan the canvas.
+      if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
         e.preventDefault();
         setIsPanning(true);
         panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
@@ -161,7 +195,7 @@ export default function Canvas() {
       }
 
       // Left click on empty canvas: DRAW new note
-      if (e.button === 0 && !e.ctrlKey && !e.altKey) {
+      if (e.button === 0 && !e.shiftKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         setIsDrawing(true);
         const canvasPos = screenToCanvas(e.clientX, e.clientY);
@@ -234,8 +268,8 @@ export default function Canvas() {
   return (
     <div
       ref={containerRef}
+      data-canvas-viewport
       className={`flex-1 overflow-hidden relative ${isPanning ? 'canvas-panning' : isDrawing ? 'cursor-crosshair' : ''}`}
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -254,7 +288,7 @@ export default function Canvas() {
       {/* Zoom indicator + pan hint */}
       <div className="absolute bottom-2 right-2 z-50 bg-gray-200 dark:bg-gray-800 rounded px-2 py-1 text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
         <div>{Math.round(zoom * 100)}%</div>
-        <div className="text-[10px]">Ctrl+drag: pan | Drag: new note</div>
+        <div className="text-[10px]">Shift+drag: pan | Drag: new note</div>
       </div>
 
       {/* Canvas transform layer */}
@@ -285,12 +319,12 @@ export default function Canvas() {
 
         {/* Columns */}
         {columns.map((col) => (
-          <ColumnContainer key={col.id} column={col} />
+          <ColumnContainer key={col.id} column={col} zoom={zoom} />
         ))}
 
         {/* Freeform notes */}
         {freeformNotes.map((note) => (
-          <NoteCard key={note.id} note={note} />
+          <NoteCard key={note.id} note={note} zoom={zoom} />
         ))}
       </div>
     </div>
