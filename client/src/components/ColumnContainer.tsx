@@ -135,8 +135,6 @@ export default function ColumnContainer({ column }: Props) {
   // Align notes inside this column into a neat grid/stack
   const handleAlignNotes = () => {
     const padding = 10;
-    const gridCols = column.grid_columns || 1;
-    const layoutMode = column.layout_mode || 'freeform';
 
     if (layoutMode === 'freeform') {
       // Align freeform notes into a vertical stack
@@ -146,25 +144,10 @@ export default function ColumnContainer({ column }: Props) {
         currentY += note.height + padding;
       });
     } else if (layoutMode === 'grid') {
-      // Snap into grid
-      const cellWidth = (size.width - padding * (gridCols + 1)) / gridCols;
-      let currentX = padding;
-      let currentY = padding;
-      let maxHeightInRow = 0;
-      let colCount = 0;
-
+      // In grid mode, just re-number positions so they flow in order
+      // The CSS grid handles the visual layout
       columnNotes.forEach((note, i) => {
-        updateNote(note.id, { x: currentX, y: currentY, position_in_column: i });
-        maxHeightInRow = Math.max(maxHeightInRow, note.height);
-        colCount++;
-        currentX += cellWidth + padding;
-
-        if (colCount >= gridCols) {
-          colCount = 0;
-          currentX = padding;
-          currentY += maxHeightInRow + padding;
-          maxHeightInRow = 0;
-        }
+        updateNote(note.id, { position_in_column: i });
       });
     }
   };
@@ -337,17 +320,14 @@ export default function ColumnContainer({ column }: Props) {
 
       {/* Column notes area */}
       <div
-        className={`flex-1 p-2 bg-gray-100 dark:bg-gray-800 rounded-b-lg overflow-hidden ${
-          layoutMode === 'grid'
-            ? 'grid gap-2 overflow-y-auto'
-            : layoutMode === 'freeform'
-            ? 'relative'
-            : 'flex flex-col gap-2 overflow-y-auto'
+        className={`flex-1 p-2 bg-gray-100 dark:bg-gray-800 rounded-b-lg ${
+          layoutMode === 'freeform'
+            ? 'relative overflow-hidden'
+            : 'overflow-y-auto'
         }`}
-        style={layoutMode === 'grid' ? { gridTemplateColumns: `repeat(${gridCols}, 1fr)`, alignContent: 'start' } : {}}
       >
         {columnNotes.length === 0 && (
-          <div className={`text-center text-gray-400 dark:text-gray-500 text-sm py-4 ${layoutMode === 'grid' ? 'col-span-full' : ''}`}>
+          <div className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">
             Drag notes here
           </div>
         )}
@@ -356,26 +336,36 @@ export default function ColumnContainer({ column }: Props) {
             <NoteCard key={note.id} note={note} inColumn inFreeformColumn />
           ))
         ) : layoutMode === 'grid' ? (
-          columnNotes.map((note, index) => (
-            <div key={note.id} className="min-h-0">
-              {dragOverIndex === index && (
-                <div className="h-1 bg-blue-500 rounded-full mb-1" />
-              )}
-              <NoteCard note={note} inColumn inGridColumn />
-            </div>
-          ))
+          <div
+            className="grid gap-2"
+            style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}
+          >
+            {columnNotes.map((note, index) => (
+              <div key={note.id} className="min-w-0">
+                {dragOverIndex === index && (
+                  <div className="h-1 bg-blue-500 rounded-full mb-1" />
+                )}
+                <NoteCard note={note} inColumn inGridColumn />
+              </div>
+            ))}
+            {dragOverIndex !== null && dragOverIndex >= columnNotes.length && (
+              <div className="h-1 bg-blue-500 rounded-full mt-1 col-span-full" />
+            )}
+          </div>
         ) : (
-          columnNotes.map((note, index) => (
-            <div key={note.id}>
-              {dragOverIndex === index && (
-                <div className="h-1 bg-blue-500 rounded-full mb-1" />
-              )}
-              <NoteCard note={note} inColumn />
-            </div>
-          ))
-        )}
-        {layoutMode !== 'freeform' && dragOverIndex !== null && dragOverIndex >= columnNotes.length && (
-          <div className="h-1 bg-blue-500 rounded-full mt-1" />
+          <div className="flex flex-col gap-2">
+            {columnNotes.map((note, index) => (
+              <div key={note.id}>
+                {dragOverIndex === index && (
+                  <div className="h-1 bg-blue-500 rounded-full mb-1" />
+                )}
+                <NoteCard note={note} inColumn />
+              </div>
+            ))}
+            {dragOverIndex !== null && dragOverIndex >= columnNotes.length && (
+              <div className="h-1 bg-blue-500 rounded-full mt-1" />
+            )}
+          </div>
         )}
       </div>
 
