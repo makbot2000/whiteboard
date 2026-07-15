@@ -127,8 +127,22 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   },
 
   updateColumn: async (id: string, data: Partial<Column>) => {
+    // Apply the requested values immediately so an older response cannot make
+    // controls such as the grid selector visibly jump back to stale state.
+    set((s) => ({
+      columns: s.columns.map((column) =>
+        column.id === id ? { ...column, ...data } : column
+      ),
+    }));
+
     const column = await api.columns.update(id, data);
-    set((s) => ({ columns: s.columns.map((c) => (c.id === id ? column : c)) }));
+    set((s) => ({
+      columns: s.columns.map((current) =>
+        current.id === id
+          ? { ...current, ...data, updated_at: column.updated_at ?? current.updated_at }
+          : current
+      ),
+    }));
   },
 
   deleteColumn: async (id: string) => {
