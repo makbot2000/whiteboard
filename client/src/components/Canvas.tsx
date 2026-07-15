@@ -4,7 +4,7 @@ import NoteCard from './NoteCard';
 import ColumnContainer from './ColumnContainer';
 
 export default function Canvas() {
-  const { activeBoard, notes, columns, updateBoard, createNote } = useBoardStore();
+  const { activeBoard, notes, columns, updateBoard, createNote, updateNote } = useBoardStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -157,6 +157,16 @@ export default function Canvas() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+      onDrop={(e) => {
+        e.preventDefault();
+        const noteId = e.dataTransfer.getData('text/note-id');
+        if (!noteId) return;
+        // Convert drop position to canvas coordinates
+        const canvasPos = screenToCanvas(e.clientX, e.clientY);
+        // Remove from column and set freeform position
+        updateNote(noteId, { column_id: null, position_in_column: null, x: canvasPos.x, y: canvasPos.y } as any);
+      }}
     >
       {/* Zoom indicator + pan hint */}
       <div className="absolute bottom-2 right-2 z-50 bg-gray-200 dark:bg-gray-800 rounded px-2 py-1 text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
