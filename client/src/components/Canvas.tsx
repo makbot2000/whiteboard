@@ -149,7 +149,7 @@ export default function Canvas() {
       const currentPan = panRef.current;
       const currentZoom = zoomRef.current;
 
-      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+      if (event.ctrlKey || event.metaKey) {
         const rect = container.getBoundingClientRect();
         const canvasX = (event.clientX - rect.left - currentPan.x) / currentZoom;
         const canvasY = (event.clientY - rect.top - currentPan.y) / currentZoom;
@@ -288,7 +288,7 @@ export default function Canvas() {
       {/* Zoom indicator + pan hint */}
       <div className="absolute bottom-2 right-2 z-50 bg-gray-200 dark:bg-gray-800 rounded px-2 py-1 text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
         <div>{Math.round(zoom * 100)}%</div>
-        <div className="text-[10px]">Shift+drag: pan | Drag: new note</div>
+        <div className="text-[10px]">Shift+drag: pan | Ctrl+wheel: zoom | Drag: new note</div>
       </div>
 
       {/* Canvas transform layer */}
