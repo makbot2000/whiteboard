@@ -42,6 +42,18 @@ html, body, #root {
   cursor: grabbing !important;
 }
 
+.cursor-crosshair {
+  cursor: crosshair !important;
+}
+
+/* Canvas layer - clickable background */
+.canvas-layer {
+  pointer-events: none;
+}
+.canvas-layer > * {
+  pointer-events: auto;
+}
+
 /* Note card resize handle */
 .resize-handle {
   position: absolute;

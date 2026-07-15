@@ -4,11 +4,13 @@ import NoteCard from './NoteCard';
 import ColumnContainer from './ColumnContainer';
 
 export default function Canvas() {
-  const { activeBoard, notes, columns, updateBoard } = useBoardStore();
+  const { activeBoard, notes, columns, updateBoard, createNote } = useBoardStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawRect, setDrawRect] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
   // Load saved pan/zoom from board
@@ -33,6 +35,16 @@ export default function Canvas() {
     [activeBoard, updateBoard]
   );
 
+  // Convert screen coordinates to canvas coordinates
+  const screenToCanvas = (screenX: number, screenY: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: (screenX - rect.left - pan.x) / zoom,
+      y: (screenY - rect.top - pan.y) / zoom,
+    };
+  };
+
   // Mouse wheel zoom
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -52,66 +64,132 @@ export default function Canvas() {
     [zoom, pan, savePanZoom]
   );
 
-  // Middle mouse pan
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      // Only act on clicks directly on the canvas background (the container div)
+      if (e.target !== containerRef.current) return;
+
+      // Ctrl+click or middle mouse: PAN
+      if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
         e.preventDefault();
         setIsPanning(true);
         panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+        return;
+      }
+
+      // Left click on empty canvas: DRAW new note
+      if (e.button === 0 && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setIsDrawing(true);
+        const canvasPos = screenToCanvas(e.clientX, e.clientY);
+        setDrawRect({ startX: canvasPos.x, startY: canvasPos.y, endX: canvasPos.x, endY: canvasPos.y });
       }
     },
-    [pan]
+    [pan, zoom]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isPanning) return;
-      const dx = e.clientX - panStart.current.x;
-      const dy = e.clientY - panStart.current.y;
-      const newPan = { x: panStart.current.panX + dx, y: panStart.current.panY + dy };
-      setPan(newPan);
+      if (isPanning) {
+        const dx = e.clientX - panStart.current.x;
+        const dy = e.clientY - panStart.current.y;
+        const newPan = { x: panStart.current.panX + dx, y: panStart.current.panY + dy };
+        setPan(newPan);
+        return;
+      }
+
+      if (isDrawing && drawRect) {
+        const canvasPos = screenToCanvas(e.clientX, e.clientY);
+        setDrawRect({ ...drawRect, endX: canvasPos.x, endY: canvasPos.y });
+      }
     },
-    [isPanning]
+    [isPanning, isDrawing, drawRect, zoom, pan]
   );
 
   const handleMouseUp = useCallback(() => {
     if (isPanning) {
       setIsPanning(false);
       savePanZoom(pan, zoom);
+      return;
     }
-  }, [isPanning, pan, zoom, savePanZoom]);
+
+    if (isDrawing && drawRect) {
+      setIsDrawing(false);
+      const x = Math.min(drawRect.startX, drawRect.endX);
+      const y = Math.min(drawRect.startY, drawRect.endY);
+      const width = Math.abs(drawRect.endX - drawRect.startX);
+      const height = Math.abs(drawRect.endY - drawRect.startY);
+
+      // Only create a note if the drag was big enough (not just a click)
+      if (width > 30 && height > 30) {
+        createNote({
+          x,
+          y,
+          width: Math.max(180, width),
+          height: Math.max(100, height),
+          title: '',
+          board_id: activeBoard?.id,
+        } as any);
+      }
+      setDrawRect(null);
+    }
+  }, [isPanning, isDrawing, drawRect, pan, zoom, savePanZoom, activeBoard, createNote]);
 
   // Freeform notes (not in a column)
   const freeformNotes = notes.filter((n) => !n.column_id);
 
+  // Calculate draw rectangle for display
+  const drawRectDisplay = drawRect
+    ? {
+        left: Math.min(drawRect.startX, drawRect.endX),
+        top: Math.min(drawRect.startY, drawRect.endY),
+        width: Math.abs(drawRect.endX - drawRect.startX),
+        height: Math.abs(drawRect.endY - drawRect.startY),
+      }
+    : null;
+
   return (
     <div
       ref={containerRef}
-      className={`flex-1 overflow-hidden relative ${isPanning ? 'canvas-panning' : ''}`}
+      className={`flex-1 overflow-hidden relative ${isPanning ? 'canvas-panning' : isDrawing ? 'cursor-crosshair' : ''}`}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      {/* Zoom indicator */}
-      <div className="absolute bottom-2 right-2 z-50 bg-gray-200 dark:bg-gray-800 rounded px-2 py-1 text-xs text-gray-600 dark:text-gray-400">
-        {Math.round(zoom * 100)}%
+      {/* Zoom indicator + pan hint */}
+      <div className="absolute bottom-2 right-2 z-50 bg-gray-200 dark:bg-gray-800 rounded px-2 py-1 text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
+        <div>{Math.round(zoom * 100)}%</div>
+        <div className="text-[10px]">Ctrl+drag: pan | Drag: new note</div>
       </div>
 
       {/* Canvas transform layer */}
       <div
+        className="canvas-layer"
         style={{
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
           transformOrigin: '0 0',
           position: 'absolute',
           top: 0,
           left: 0,
-          width: '1px',
-          height: '1px',
+          width: '100000px',
+          height: '100000px',
         }}
       >
+        {/* Draw rectangle preview */}
+        {isDrawing && drawRectDisplay && drawRectDisplay.width > 5 && (
+          <div
+            className="absolute border-2 border-dashed border-blue-500 bg-blue-100/20 dark:bg-blue-900/20 rounded-lg pointer-events-none z-[100]"
+            style={{
+              left: drawRectDisplay.left,
+              top: drawRectDisplay.top,
+              width: drawRectDisplay.width,
+              height: drawRectDisplay.height,
+            }}
+          />
+        )}
+
         {/* Columns */}
         {columns.map((col) => (
           <ColumnContainer key={col.id} column={col} />

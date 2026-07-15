@@ -19,27 +19,18 @@ export default function NoteCard({ note, inColumn = false }: Props) {
   const [tagInput, setTagInput] = useState('');
   const dragStart = useRef({ x: 0, y: 0, noteX: 0, noteY: 0 });
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
-  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setPosition({ x: note.x, y: note.y });
     setSize({ width: note.width, height: note.height });
   }, [note.x, note.y, note.width, note.height]);
 
-  const debouncedSave = useCallback(
-    (data: Partial<Note>) => {
-      if (saveTimeout.current) clearTimeout(saveTimeout.current);
-      saveTimeout.current = setTimeout(() => {
-        updateNote(note.id, data);
-      }, 300);
-    },
-    [note.id, updateNote]
-  );
-
-  // Drag handlers (only for freeform notes)
+  // Drag handlers (only for freeform notes — position dragging)
   const handleDragStart = (e: React.MouseEvent) => {
-    if (inColumn) return; // columns handle their own ordering
+    if (inColumn) return;
     if ((e.target as HTMLElement).closest('.note-editor-area') || (e.target as HTMLElement).closest('.resize-handle')) return;
+    if ((e.target as HTMLElement).tagName === 'INPUT') return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
@@ -48,11 +39,10 @@ export default function NoteCard({ note, inColumn = false }: Props) {
     const trackMove = (ev: MouseEvent) => {
       (window as any)._lastDragX = ev.clientX - dragStart.current.x;
       (window as any)._lastDragY = ev.clientY - dragStart.current.y;
-      const newPos = {
+      setPosition({
         x: dragStart.current.noteX + (ev.clientX - dragStart.current.x),
         y: dragStart.current.noteY + (ev.clientY - dragStart.current.y),
-      };
-      setPosition(newPos);
+      });
     };
 
     document.addEventListener('mousemove', trackMove);
@@ -63,7 +53,31 @@ export default function NoteCard({ note, inColumn = false }: Props) {
       const finalY = dragStart.current.noteY + ((window as any)._lastDragY || 0);
       setPosition({ x: finalX, y: finalY });
       updateNote(note.id, { x: finalX, y: finalY });
+
+      // Check if dropped over a column
+      checkDropOnColumn(finalX, finalY);
     }, { once: true });
+  };
+
+  // Check if note was dropped over a column area
+  const checkDropOnColumn = (noteX: number, noteY: number) => {
+    for (const col of columns) {
+      const colRight = col.x + col.width;
+      const colBottom = col.y + 800; // approximate column height
+      if (noteX >= col.x && noteX <= colRight && noteY >= col.y && noteY <= colBottom) {
+        // Drop into this column
+        if (note.column_id !== col.id) {
+          updateNote(note.id, { column_id: col.id, position_in_column: 999 } as any);
+        }
+        return;
+      }
+    }
+  };
+
+  // HTML5 drag for column reordering
+  const handleNativeDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('text/note-id', note.id);
+    e.dataTransfer.effectAllowed = 'move';
   };
 
   // Resize handlers
@@ -73,31 +87,28 @@ export default function NoteCard({ note, inColumn = false }: Props) {
     setIsResizing(true);
     resizeStart.current = { x: e.clientX, y: e.clientY, w: size.width, h: size.height };
 
-    const handleMove = (ev: MouseEvent) => {
+    const trackMove = (ev: MouseEvent) => {
       const dw = ev.clientX - resizeStart.current.x;
       const dh = ev.clientY - resizeStart.current.y;
-      const newSize = {
+      setSize({
         width: Math.max(180, resizeStart.current.w + dw),
         height: Math.max(100, resizeStart.current.h + dh),
-      };
-      setSize(newSize);
+      });
     };
 
-    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mousemove', trackMove);
     document.addEventListener('mouseup', () => {
       setIsResizing(false);
-      document.removeEventListener('mousemove', handleMove);
-      const finalW = Math.max(180, resizeStart.current.w + ((window as any)._lastResizeW || 0));
-      const finalH = Math.max(100, resizeStart.current.h + ((window as any)._lastResizeH || 0));
+      document.removeEventListener('mousemove', trackMove);
       updateNote(note.id, { width: size.width, height: size.height });
     }, { once: true });
   };
 
-  // Fit to content
+  // Fit/auto-size to content
   const handleFitToContent = () => {
-    const editorEl = document.querySelector(`[data-note-id="${note.id}"] .tiptap`);
+    const editorEl = cardRef.current?.querySelector('.tiptap');
     if (editorEl) {
-      const newHeight = Math.max(100, editorEl.scrollHeight + 80);
+      const newHeight = Math.max(100, editorEl.scrollHeight + 90); // title + toolbar + padding
       setSize({ ...size, height: newHeight });
       updateNote(note.id, { height: newHeight });
     }
@@ -154,10 +165,13 @@ export default function NoteCard({ note, inColumn = false }: Props) {
 
   return (
     <div
+      ref={cardRef}
       data-note-id={note.id}
+      draggable={inColumn}
+      onDragStart={inColumn ? handleNativeDragStart : undefined}
       className={`rounded-lg shadow-lg border bg-white dark:bg-gray-800 flex flex-col ${
         isDragging ? 'opacity-80 shadow-2xl z-50' : 'z-10'
-      } ${isResizing ? 'select-none' : ''} ${inColumn ? 'relative' : 'absolute'}`}
+      } ${isResizing ? 'select-none' : ''} ${inColumn ? 'relative cursor-grab' : 'absolute'}`}
       style={{
         ...(inColumn ? {} : { left: position.x, top: position.y }),
         width: inColumn ? '100%' : size.width,
@@ -169,12 +183,12 @@ export default function NoteCard({ note, inColumn = false }: Props) {
       {/* Title bar / drag handle */}
       <div
         className={`flex items-center gap-1 px-2 py-1 border-b border-gray-200 dark:border-gray-700 select-none shrink-0 ${
-          inColumn ? 'cursor-default' : 'cursor-move'
+          inColumn ? '' : 'cursor-move'
         }`}
         onMouseDown={handleDragStart}
       >
         <input
-          className="flex-1 bg-transparent text-sm font-medium outline-none placeholder-gray-400 dark:text-gray-100"
+          className="flex-1 bg-transparent text-sm font-medium outline-none placeholder-gray-400 text-gray-900 dark:text-gray-100"
           value={note.title}
           placeholder="Untitled"
           onChange={(e) => {
@@ -183,7 +197,7 @@ export default function NoteCard({ note, inColumn = false }: Props) {
           onClick={(e) => e.stopPropagation()}
         />
         <button
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs px-1"
+          className="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 text-xs px-1"
           onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
         >
           ...
@@ -193,22 +207,22 @@ export default function NoteCard({ note, inColumn = false }: Props) {
       {/* Context menu */}
       {showMenu && (
         <div className="absolute top-7 right-1 z-[100] bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded shadow-lg py-1 text-sm min-w-[160px]">
-          <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600" onClick={handleFitToContent}>
+          <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100" onClick={handleFitToContent}>
             Fit to content
           </button>
-          <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600" onClick={() => { setEditingTags(!editingTags); setShowMenu(false); }}>
+          <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100" onClick={() => { setEditingTags(!editingTags); setShowMenu(false); }}>
             Edit tags
           </button>
 
           {/* Move to column submenu */}
           {columns.length > 0 && (
             <div className="border-t border-gray-200 dark:border-gray-600 mt-1 pt-1">
-              <span className="block px-3 py-0.5 text-xs text-gray-500">Move to column:</span>
+              <span className="block px-3 py-0.5 text-xs text-gray-500 dark:text-gray-400">Move to column:</span>
               {columns.map((col) => (
                 <button
                   key={col.id}
                   className={`block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 ${
-                    note.column_id === col.id ? 'text-blue-600 font-medium' : ''
+                    note.column_id === col.id ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-900 dark:text-gray-100'
                   }`}
                   onClick={() => handleMoveToColumn(col.id)}
                 >
@@ -216,7 +230,7 @@ export default function NoteCard({ note, inColumn = false }: Props) {
                 </button>
               ))}
               {isInColumn && (
-                <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 text-orange-500" onClick={handleRemoveFromColumn}>
+                <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 text-orange-500 dark:text-orange-400" onClick={handleRemoveFromColumn}>
                   Remove from column
                 </button>
               )}
@@ -226,9 +240,9 @@ export default function NoteCard({ note, inColumn = false }: Props) {
           {/* Group submenu */}
           {groups.length > 0 && (
             <div className="border-t border-gray-200 dark:border-gray-600 mt-1 pt-1">
-              <span className="block px-3 py-0.5 text-xs text-gray-500">Group:</span>
+              <span className="block px-3 py-0.5 text-xs text-gray-500 dark:text-gray-400">Group:</span>
               <button
-                className={`block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 ${!note.group_id ? 'font-medium' : ''}`}
+                className={`block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 ${!note.group_id ? 'font-medium' : ''} text-gray-900 dark:text-gray-100`}
                 onClick={() => handleAssignGroup(null)}
               >
                 None
@@ -236,7 +250,7 @@ export default function NoteCard({ note, inColumn = false }: Props) {
               {groups.map((g) => (
                 <button
                   key={g.id}
-                  className={`block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 ${
+                  className={`block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 ${
                     note.group_id === g.id ? 'font-medium' : ''
                   }`}
                   onClick={() => handleAssignGroup(g.id)}
@@ -249,7 +263,7 @@ export default function NoteCard({ note, inColumn = false }: Props) {
           )}
 
           <div className="border-t border-gray-200 dark:border-gray-600 mt-1 pt-1">
-            <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 text-red-500" onClick={handleDelete}>
+            <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 text-red-500 dark:text-red-400" onClick={handleDelete}>
               Delete
             </button>
           </div>
@@ -266,7 +280,7 @@ export default function NoteCard({ note, inColumn = false }: Props) {
         <div className="px-2 py-1 border-t border-gray-200 dark:border-gray-700 shrink-0">
           <div className="flex flex-wrap gap-1">
             {parsedTags.map((tag, i) => (
-              <span key={i} className="inline-flex items-center text-xs bg-gray-200 dark:bg-gray-600 rounded px-1.5 py-0.5">
+              <span key={i} className="inline-flex items-center text-xs bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-gray-100 rounded px-1.5 py-0.5">
                 {tag}
                 {editingTags && (
                   <button className="ml-1 text-red-400 hover:text-red-600" onClick={() => handleRemoveTag(tag)}>x</button>
@@ -277,7 +291,7 @@ export default function NoteCard({ note, inColumn = false }: Props) {
           {editingTags && (
             <div className="flex gap-1 mt-1">
               <input
-                className="flex-1 text-xs bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5"
+                className="flex-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5"
                 placeholder="Add tag..."
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
@@ -286,8 +300,8 @@ export default function NoteCard({ note, inColumn = false }: Props) {
                   if (e.key === 'Escape') setEditingTags(false);
                 }}
               />
-              <button className="text-xs text-blue-500" onClick={handleAddTag}>+</button>
-              <button className="text-xs text-gray-500" onClick={() => setEditingTags(false)}>done</button>
+              <button className="text-xs text-blue-500 dark:text-blue-400" onClick={handleAddTag}>+</button>
+              <button className="text-xs text-gray-500 dark:text-gray-400" onClick={() => setEditingTags(false)}>done</button>
             </div>
           )}
         </div>
@@ -296,7 +310,7 @@ export default function NoteCard({ note, inColumn = false }: Props) {
       {/* Group indicator */}
       {group && (
         <div className="px-2 py-0.5 border-t border-gray-200 dark:border-gray-700 shrink-0">
-          <span className="text-xs text-gray-500 flex items-center gap-1">
+          <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
             <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: group.color }} />
             {group.name}
           </span>
@@ -304,7 +318,7 @@ export default function NoteCard({ note, inColumn = false }: Props) {
       )}
 
       {/* Resize handle */}
-      <div className="resize-handle" onMouseDown={handleResizeStart} />
+      {!inColumn && <div className="resize-handle" onMouseDown={handleResizeStart} />}
     </div>
   );
 }
