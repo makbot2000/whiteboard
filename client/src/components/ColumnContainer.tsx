@@ -132,6 +132,39 @@ export default function ColumnContainer({ column }: Props) {
     updateColumn(column.id, { grid_columns: Math.max(1, Math.min(5, num)) });
   };
 
+  // Fit column to its content
+  const handleFitToContent = () => {
+    if (columnNotes.length === 0) return;
+
+    if (layoutMode === 'freeform') {
+      // Find bounding box of all notes
+      let maxX = 0;
+      let maxY = 0;
+      for (const note of columnNotes) {
+        maxX = Math.max(maxX, note.x + note.width);
+        maxY = Math.max(maxY, note.y + note.height);
+      }
+      setSize({ width: Math.max(200, maxX + 20), height: Math.max(150, maxY + 20) });
+      updateColumn(column.id, { width: Math.max(200, maxX + 20), height: Math.max(150, maxY + 20) });
+    } else {
+      // For grid mode, measure the rendered content
+      const contentEl = columnRef.current?.querySelector('.column-content');
+      if (contentEl) {
+        const newHeight = Math.max(150, contentEl.scrollHeight + 60); // header + padding
+        setSize({ ...size, height: newHeight });
+        updateColumn(column.id, { height: newHeight });
+      } else {
+        // Estimate height based on note heights
+        const padding = 10;
+        const rows = Math.ceil(columnNotes.length / gridCols);
+        const avgHeight = columnNotes.reduce((sum, n) => sum + n.height, 0) / columnNotes.length;
+        const estHeight = rows * (avgHeight + padding) + 60;
+        setSize({ ...size, height: Math.max(150, estHeight) });
+        updateColumn(column.id, { height: Math.max(150, estHeight) });
+      }
+    }
+  };
+
   // Align notes inside this column into a neat grid/stack
   const handleAlignNotes = () => {
     const padding = 10;
@@ -239,6 +272,15 @@ export default function ColumnContainer({ column }: Props) {
           </span>
         )}
 
+        {/* Fit to content */}
+        <button
+          className="text-sm text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 px-1"
+          onClick={(e) => { e.stopPropagation(); handleFitToContent(); }}
+          title="Fit column to content"
+        >
+          Fit
+        </button>
+
         {/* Align button */}
         <button
           className="text-sm text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 px-1"
@@ -316,7 +358,7 @@ export default function ColumnContainer({ column }: Props) {
 
       {/* Column notes area */}
       <div
-        className={`flex-1 p-2 bg-gray-100 dark:bg-gray-800 rounded-b-lg ${
+        className={`column-content flex-1 p-2 bg-gray-100 dark:bg-gray-800 rounded-b-lg ${
           layoutMode === 'freeform'
             ? 'relative overflow-hidden'
             : 'overflow-y-auto'
