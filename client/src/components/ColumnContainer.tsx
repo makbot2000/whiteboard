@@ -294,28 +294,38 @@ export default function ColumnContainer({ column }: Props) {
 
       {/* Column notes area */}
       <div
-        className={`flex-1 p-2 bg-gray-100 dark:bg-gray-800 rounded-b-lg overflow-y-auto ${
+        className={`flex-1 p-2 bg-gray-100 dark:bg-gray-800 rounded-b-lg overflow-hidden ${
           layoutMode === 'grid'
-            ? 'grid gap-2'
-            : 'flex flex-col gap-2'
+            ? 'grid gap-2 overflow-y-auto'
+            : layoutMode === 'freeform'
+            ? 'relative'
+            : 'flex flex-col gap-2 overflow-y-auto'
         }`}
         style={layoutMode === 'grid' ? { gridTemplateColumns: `repeat(${gridCols}, 1fr)` } : {}}
+        onDragOver={layoutMode !== 'freeform' ? undefined : (e) => { e.preventDefault(); }}
       >
         {columnNotes.length === 0 && (
           <div className={`text-center text-gray-400 dark:text-gray-500 text-sm py-4 ${layoutMode === 'grid' ? 'col-span-full' : ''}`}>
             Drag notes here
           </div>
         )}
-        {columnNotes.map((note, index) => (
-          <div key={note.id}>
-            {/* Drop indicator */}
-            {dragOverIndex === index && (
-              <div className="h-1 bg-blue-500 rounded-full mb-1" />
-            )}
-            <NoteCard note={note} inColumn />
-          </div>
-        ))}
-        {dragOverIndex !== null && dragOverIndex >= columnNotes.length && (
+        {layoutMode === 'freeform' ? (
+          // Freeform: notes are absolutely positioned inside the column
+          columnNotes.map((note) => (
+            <NoteCard key={note.id} note={note} inColumn inFreeformColumn />
+          ))
+        ) : (
+          // Grid or stacked: notes flow in layout
+          columnNotes.map((note, index) => (
+            <div key={note.id}>
+              {dragOverIndex === index && (
+                <div className="h-1 bg-blue-500 rounded-full mb-1" />
+              )}
+              <NoteCard note={note} inColumn />
+            </div>
+          ))
+        )}
+        {layoutMode !== 'freeform' && dragOverIndex !== null && dragOverIndex >= columnNotes.length && (
           <div className="h-1 bg-blue-500 rounded-full mt-1" />
         )}
       </div>

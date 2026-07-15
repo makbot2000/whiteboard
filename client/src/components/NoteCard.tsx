@@ -6,9 +6,10 @@ import NoteEditor from './NoteEditor';
 interface Props {
   note: Note;
   inColumn?: boolean;
+  inFreeformColumn?: boolean;
 }
 
-export default function NoteCard({ note, inColumn = false }: Props) {
+export default function NoteCard({ note, inColumn = false, inFreeformColumn = false }: Props) {
   const { updateNote, deleteNote, groups, columns, boards, activeBoard, copyNote, moveNote } = useBoardStore();
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -26,9 +27,10 @@ export default function NoteCard({ note, inColumn = false }: Props) {
     setSize({ width: note.width, height: note.height });
   }, [note.x, note.y, note.width, note.height]);
 
-  // Drag handlers (only for freeform notes — position dragging)
+  // Drag handlers — works for freeform notes AND notes in freeform columns
   const handleDragStart = (e: React.MouseEvent) => {
-    if (inColumn) return;
+    // In a grid column, don't allow free dragging
+    if (inColumn && !inFreeformColumn) return;
     if ((e.target as HTMLElement).closest('.note-editor-area') || (e.target as HTMLElement).closest('.resize-handle')) return;
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
     e.preventDefault();
@@ -167,38 +169,43 @@ export default function NoteCard({ note, inColumn = false }: Props) {
     <div
       ref={cardRef}
       data-note-id={note.id}
-      draggable={inColumn}
-      onDragStart={inColumn ? handleNativeDragStart : undefined}
+      draggable={inColumn && !inFreeformColumn}
+      onDragStart={inColumn && !inFreeformColumn ? handleNativeDragStart : undefined}
       className={`rounded-lg shadow-lg border bg-white dark:bg-gray-800 flex flex-col ${
         isDragging ? 'opacity-80 shadow-2xl z-50' : 'z-10'
-      } ${isResizing ? 'select-none' : ''} ${inColumn ? 'relative cursor-grab' : 'absolute'}`}
+      } ${isResizing ? 'select-none' : ''} ${inColumn && !inFreeformColumn ? 'relative cursor-grab' : inColumn && inFreeformColumn ? 'absolute' : 'absolute'}`}
       style={{
-        ...(inColumn ? {} : { left: position.x, top: position.y }),
-        width: inColumn ? '100%' : size.width,
+        ...(inColumn && !inFreeformColumn ? {} : { left: position.x, top: position.y }),
+        width: inColumn && !inFreeformColumn ? '100%' : size.width,
         height: size.height,
         borderColor: borderColor || (isDragging ? '#3b82f6' : undefined),
         borderWidth: borderColor ? 2 : undefined,
       }}
     >
-      {/* Title bar / drag handle */}
+      {/* Title bar / drag handle - tall and easy to grab */}
       <div
-        className={`flex items-center gap-1 px-2 py-1 border-b border-gray-200 dark:border-gray-700 select-none shrink-0 ${
-          inColumn ? '' : 'cursor-move'
-        }`}
+        className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 select-none shrink-0 cursor-move bg-gray-50 dark:bg-gray-750 rounded-t-lg"
         onMouseDown={handleDragStart}
       >
+        <div className="w-4 shrink-0 flex flex-col gap-[2px] opacity-40">
+          <div className="h-[2px] bg-gray-400 rounded" />
+          <div className="h-[2px] bg-gray-400 rounded" />
+          <div className="h-[2px] bg-gray-400 rounded" />
+        </div>
         <input
-          className="flex-1 bg-transparent text-sm font-medium outline-none placeholder-gray-400 text-gray-900 dark:text-gray-100"
+          className="flex-1 bg-transparent text-sm font-medium outline-none placeholder-gray-400 text-gray-900 dark:text-gray-100 cursor-text"
           value={note.title}
           placeholder="Untitled"
           onChange={(e) => {
             updateNote(note.id, { title: e.target.value });
           }}
           onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
         />
         <button
-          className="text-gray-400 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400 text-[10px] px-1"
+          className="text-gray-400 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400 text-sm px-1"
           onClick={(e) => { e.stopPropagation(); handleFitToContent(); }}
+          onMouseDown={(e) => e.stopPropagation()}
           title="Fit to content"
         >
           ⤢
@@ -206,6 +213,7 @@ export default function NoteCard({ note, inColumn = false }: Props) {
         <button
           className="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 text-xs px-1"
           onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           ...
         </button>
@@ -346,8 +354,8 @@ export default function NoteCard({ note, inColumn = false }: Props) {
         </div>
       )}
 
-      {/* Resize handle */}
-      {!inColumn && <div className="resize-handle" onMouseDown={handleResizeStart} />}
+      {/* Resize handle — show for freeform notes and notes in freeform columns */}
+      {(!inColumn || inFreeformColumn) && <div className="resize-handle" onMouseDown={handleResizeStart} />}
     </div>
   );
 }
