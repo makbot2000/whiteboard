@@ -50,20 +50,35 @@ export default function Toolbar() {
       });
     }
 
-    // Arrange into a grid
+    // Arrange into a grid with proper spacing based on actual note sizes
     const cols = 4;
-    const gapX = 300;
-    const gapY = 230;
+    const padding = 20; // gap between notes
     const startX = 50;
     const startY = 50;
 
-    const updates = sorted.map((note, i) => ({
-      id: note.id,
-      x: startX + (i % cols) * gapX,
-      y: startY + Math.floor(i / cols) * gapY,
-    }));
+    // Calculate max width and height per row/column to avoid overlap
+    const rows: typeof sorted[] = [];
+    for (let i = 0; i < sorted.length; i += cols) {
+      rows.push(sorted.slice(i, i + cols));
+    }
 
-    // Update each note's position locally + batch save
+    let currentY = startY;
+    const updates: { id: string; x: number; y: number }[] = [];
+
+    for (const row of rows) {
+      let currentX = startX;
+      let maxHeightInRow = 0;
+
+      for (const note of row) {
+        updates.push({ id: note.id, x: currentX, y: currentY });
+        currentX += note.width + padding;
+        maxHeightInRow = Math.max(maxHeightInRow, note.height);
+      }
+
+      currentY += maxHeightInRow + padding;
+    }
+
+    // Update each note's position
     updates.forEach((u) => {
       updateNote(u.id, { x: u.x, y: u.y });
     });
