@@ -9,7 +9,7 @@ interface Props {
 }
 
 export default function NoteCard({ note, inColumn = false }: Props) {
-  const { updateNote, deleteNote, groups, columns } = useBoardStore();
+  const { updateNote, deleteNote, groups, columns, boards, activeBoard, copyNote, moveNote } = useBoardStore();
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [position, setPosition] = useState({ x: note.x, y: note.y });
@@ -197,6 +197,13 @@ export default function NoteCard({ note, inColumn = false }: Props) {
           onClick={(e) => e.stopPropagation()}
         />
         <button
+          className="text-gray-400 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400 text-[10px] px-1"
+          onClick={(e) => { e.stopPropagation(); handleFitToContent(); }}
+          title="Fit to content"
+        >
+          ⤢
+        </button>
+        <button
           className="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 text-xs px-1"
           onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
         >
@@ -207,9 +214,6 @@ export default function NoteCard({ note, inColumn = false }: Props) {
       {/* Context menu */}
       {showMenu && (
         <div className="absolute top-7 right-1 z-[100] bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded shadow-lg py-1 text-sm min-w-[160px]">
-          <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100" onClick={handleFitToContent}>
-            Fit to content
-          </button>
           <button className="block w-full text-left px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100" onClick={() => { setEditingTags(!editingTags); setShowMenu(false); }}>
             Edit tags
           </button>
@@ -267,6 +271,31 @@ export default function NoteCard({ note, inColumn = false }: Props) {
               Delete
             </button>
           </div>
+
+          {/* Send to another board */}
+          {boards.length > 1 && (
+            <div className="border-t border-gray-200 dark:border-gray-600 mt-1 pt-1">
+              <span className="block px-3 py-0.5 text-xs text-gray-500 dark:text-gray-400">Send to board:</span>
+              {boards.filter((b) => b.id !== activeBoard?.id).map((b) => (
+                <div key={b.id} className="flex items-center px-3 py-0.5 gap-1">
+                  <button
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                    onClick={() => { copyNote(note.id, b.id); setShowMenu(false); }}
+                  >
+                    Copy
+                  </button>
+                  <span className="text-xs text-gray-400">|</span>
+                  <button
+                    className="text-xs text-orange-600 dark:text-orange-400 hover:underline"
+                    onClick={() => { moveNote(note.id, b.id); setShowMenu(false); }}
+                  >
+                    Move
+                  </button>
+                  <span className="text-xs text-gray-700 dark:text-gray-300 truncate flex-1">{b.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

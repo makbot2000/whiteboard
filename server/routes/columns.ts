@@ -29,9 +29,9 @@ router.put('/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM columns WHERE id = ?').get(req.params.id) as any;
   if (!existing) return res.status(404).json({ error: 'Column not found' });
 
-  const { name, x, y, width, sort_by, sort_order } = req.body;
+  const { name, x, y, width, height, layout_mode, grid_columns, sort_by, sort_order } = req.body;
   const stmt = db.prepare(`
-    UPDATE columns SET name = ?, x = ?, y = ?, width = ?, sort_by = ?, sort_order = ?, updated_at = datetime('now')
+    UPDATE columns SET name = ?, x = ?, y = ?, width = ?, height = ?, layout_mode = ?, grid_columns = ?, sort_by = ?, sort_order = ?, updated_at = datetime('now')
     WHERE id = ?
   `);
   stmt.run(
@@ -39,6 +39,9 @@ router.put('/:id', (req, res) => {
     x ?? existing.x,
     y ?? existing.y,
     width ?? existing.width,
+    height ?? existing.height,
+    layout_mode ?? existing.layout_mode,
+    grid_columns ?? existing.grid_columns,
     sort_by ?? existing.sort_by,
     sort_order ?? existing.sort_order,
     req.params.id

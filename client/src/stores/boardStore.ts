@@ -22,6 +22,8 @@ interface BoardStore {
   updateNote: (id: string, data: Partial<Note>) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   batchUpdatePositions: (updates: any[]) => Promise<void>;
+  copyNote: (id: string, targetBoardId: string) => Promise<void>;
+  moveNote: (id: string, targetBoardId: string) => Promise<void>;
 
   createColumn: (data: Partial<Column>) => Promise<void>;
   updateColumn: (id: string, data: Partial<Column>) => Promise<void>;
@@ -107,6 +109,16 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
 
   batchUpdatePositions: async (updates: any[]) => {
     await api.notes.batchPositions(updates);
+  },
+
+  copyNote: async (id: string, targetBoardId: string) => {
+    await api.notes.copy(id, targetBoardId);
+  },
+
+  moveNote: async (id: string, targetBoardId: string) => {
+    await api.notes.move(id, targetBoardId);
+    // Remove from current board's notes
+    set((s) => ({ notes: s.notes.filter((n) => n.id !== id) }));
   },
 
   createColumn: async (data: Partial<Column>) => {

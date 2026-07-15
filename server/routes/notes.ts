@@ -77,6 +77,38 @@ router.delete('/:id', (req, res) => {
   res.status(204).send();
 });
 
+// Copy a note to another board
+router.post('/:id/copy', (req, res) => {
+  const { target_board_id } = req.body;
+  if (!target_board_id) return res.status(400).json({ error: 'target_board_id required' });
+
+  const existing = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id) as any;
+  if (!existing) return res.status(404).json({ error: 'Note not found' });
+
+  const id = uuidv4();
+  const stmt = db.prepare(`
+    INSERT INTO notes (id, board_id, column_id, group_id, title, content_json, x, y, width, height, position_in_column, tags)
+    VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, ?)
+  `);
+  stmt.run(id, target_board_id, existing.title, existing.content_json, existing.x, existing.y, existing.width, existing.height, existing.tags);
+  const note = db.prepare('SELECT * FROM notes WHERE id = ?').get(id);
+  res.status(201).json(note);
+});
+
+// Move a note to another board
+router.post('/:id/move', (req, res) => {
+  const { target_board_id } = req.body;
+  if (!target_board_id) return res.status(400).json({ error: 'target_board_id required' });
+
+  const existing = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id) as any;
+  if (!existing) return res.status(404).json({ error: 'Note not found' });
+
+  db.prepare(`UPDATE notes SET board_id = ?, column_id = NULL, group_id = NULL, position_in_column = NULL, updated_at = datetime('now') WHERE id = ?`)
+    .run(target_board_id, req.params.id);
+  const note = db.prepare('SELECT * FROM notes WHERE id = ?').get(req.params.id);
+  res.json(note);
+});
+
 // Batch update positions (for drag reordering)
 router.put('/batch/positions', (req, res) => {
   const { updates } = req.body; // [{id, x, y, column_id, position_in_column}]

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useBoardStore } from '../stores/boardStore';
 
 export default function Toolbar() {
-  const { activeBoard, createNote, createColumn, createGroup, groups, notes, updateNote, batchUpdatePositions } = useBoardStore();
+  const { activeBoard, createNote, createColumn, createGroup, groups, notes, columns, updateNote, updateColumn, batchUpdatePositions } = useBoardStore();
   const [showGroupPanel, setShowGroupPanel] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupColor, setNewGroupColor] = useState('#6366f1');
@@ -28,10 +28,53 @@ export default function Toolbar() {
     setNewGroupName('');
   };
 
+  // Align columns side-by-side, freeform notes to the right
+  const handleAlignColumns = () => {
+    const padding = 20;
+    const startX = 50;
+    const startY = 50;
+
+    let currentX = startX;
+
+    // Sort columns by current x position to maintain relative order
+    const sortedColumns = [...columns].sort((a, b) => a.x - b.x);
+
+    // Position columns side by side
+    for (const col of sortedColumns) {
+      updateColumn(col.id, { x: currentX, y: startY });
+      currentX += col.width + padding;
+    }
+
+    // Position freeform notes to the right of all columns
+    const freeformNotes = notes.filter((n) => !n.column_id);
+    if (freeformNotes.length > 0) {
+      const noteCols = 3;
+      const noteStartX = currentX + padding;
+      let noteX = noteStartX;
+      let noteY = startY;
+      let maxHeightInRow = 0;
+      let colCount = 0;
+
+      for (const note of freeformNotes) {
+        updateNote(note.id, { x: noteX, y: noteY });
+        noteX += note.width + padding;
+        maxHeightInRow = Math.max(maxHeightInRow, note.height);
+        colCount++;
+
+        if (colCount >= noteCols) {
+          colCount = 0;
+          noteX = noteStartX;
+          noteY += maxHeightInRow + padding;
+          maxHeightInRow = 0;
+        }
+      }
+    }
+  };
+
   // Canvas-level sort: arrange freeform notes into a grid
   const handleSort = (mode: string) => {
     setSortMode(mode);
-    if (mode === 'freeform') return; // restore original positions (already stored in DB)
+    if (mode === 'freeform') return;
 
     const freeformNotes = notes.filter((n) => !n.column_id);
     let sorted = [...freeformNotes];
@@ -91,7 +134,7 @@ export default function Toolbar() {
       {/* Left side: sort controls */}
       <div className="flex gap-2 pointer-events-auto">
         <select
-          className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm shadow-md"
+          className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm shadow-md"
           value={sortMode}
           onChange={(e) => handleSort(e.target.value)}
         >
@@ -101,6 +144,13 @@ export default function Toolbar() {
           <option value="modified">Sort: Modified</option>
           <option value="tags">Sort: Tags</option>
         </select>
+        <button
+          className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm shadow-md"
+          onClick={handleAlignColumns}
+          title="Align columns side-by-side, freeform notes to the right"
+        >
+          Align
+        </button>
       </div>
 
       {/* Right side: action buttons */}

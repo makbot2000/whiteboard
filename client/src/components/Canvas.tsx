@@ -48,7 +48,7 @@ export default function Canvas() {
   // Mouse wheel zoom
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
         const newZoom = Math.max(0.2, Math.min(3, zoom * delta));

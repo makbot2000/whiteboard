@@ -44,6 +44,9 @@ db.exec(`
     x REAL NOT NULL DEFAULT 0,
     y REAL NOT NULL DEFAULT 0,
     width REAL DEFAULT 300,
+    height REAL DEFAULT 400,
+    layout_mode TEXT DEFAULT 'freeform',
+    grid_columns INTEGER DEFAULT 1,
     sort_by TEXT DEFAULT 'manual',
     sort_order TEXT DEFAULT 'asc',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -69,3 +72,14 @@ db.exec(`
 `);
 
 export default db;
+
+// Migrations for existing databases
+try {
+  db.exec(`ALTER TABLE columns ADD COLUMN height REAL DEFAULT 400`);
+} catch (e) { /* column already exists */ }
+try {
+  db.exec(`ALTER TABLE columns ADD COLUMN layout_mode TEXT DEFAULT 'freeform'`);
+} catch (e) { /* column already exists */ }
+try {
+  db.exec(`ALTER TABLE columns ADD COLUMN grid_columns INTEGER DEFAULT 1`);
+} catch (e) { /* column already exists */ }

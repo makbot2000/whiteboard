@@ -12,18 +12,18 @@ export default function ColumnContainer({ column }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [position, setPosition] = useState({ x: column.x, y: column.y });
-  const [width, setWidth] = useState(column.width);
+  const [size, setSize] = useState({ width: column.width, height: column.height || 400 });
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(column.name);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const dragStart = useRef({ x: 0, y: 0, colX: 0, colY: 0 });
-  const resizeStart = useRef({ x: 0, w: 0 });
+  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
   const columnRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setPosition({ x: column.x, y: column.y });
-    setWidth(column.width);
-  }, [column.x, column.y, column.width]);
+    setSize({ width: column.width, height: column.height || 400 });
+  }, [column.x, column.y, column.width, column.height]);
 
   // Notes in this column, sorted
   const columnNotes = notes
@@ -56,30 +56,15 @@ export default function ColumnContainer({ column }: Props) {
     setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY, colX: position.x, colY: position.y };
 
-    const handleMove = (ev: MouseEvent) => {
-      const dx = ev.clientX - dragStart.current.x;
-      const dy = ev.clientY - dragStart.current.y;
-      setPosition({ x: dragStart.current.colX + dx, y: dragStart.current.colY + dy });
-    };
-
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', () => {
-      setIsDragging(false);
-      document.removeEventListener('mousemove', handleMove);
-      // Calculate final pos
-      const finalX = dragStart.current.colX + ((window as any)._lastColDragX || 0);
-      const finalY = dragStart.current.colY + ((window as any)._lastColDragY || 0);
-      updateColumn(column.id, { x: finalX, y: finalY });
-    }, { once: true });
-
-    // Track
-    const origMove = handleMove;
-    document.removeEventListener('mousemove', handleMove);
     const trackMove = (ev: MouseEvent) => {
       (window as any)._lastColDragX = ev.clientX - dragStart.current.x;
       (window as any)._lastColDragY = ev.clientY - dragStart.current.y;
-      origMove(ev);
+      setPosition({
+        x: dragStart.current.colX + (ev.clientX - dragStart.current.x),
+        y: dragStart.current.colY + (ev.clientY - dragStart.current.y),
+      });
     };
+
     document.addEventListener('mousemove', trackMove);
     document.addEventListener('mouseup', () => {
       setIsDragging(false);
@@ -91,40 +76,27 @@ export default function ColumnContainer({ column }: Props) {
     }, { once: true });
   };
 
-  // Resize column from right edge
+  // Diagonal resize (bottom-right corner)
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsResizing(true);
-    resizeStart.current = { x: e.clientX, w: width };
+    resizeStart.current = { x: e.clientX, y: e.clientY, w: size.width, h: size.height };
 
-    const handleMove = (ev: MouseEvent) => {
-      const dw = ev.clientX - resizeStart.current.x;
-      setWidth(Math.max(200, resizeStart.current.w + dw));
-    };
-
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', () => {
-      setIsResizing(false);
-      document.removeEventListener('mousemove', handleMove);
-      const finalW = Math.max(200, resizeStart.current.w + (((window as any)._lastColResizeW) || 0));
-      updateColumn(column.id, { width });
-    }, { once: true });
-
-    // Track for stale closure
-    document.removeEventListener('mousemove', handleMove);
     const trackMove = (ev: MouseEvent) => {
-      (window as any)._lastColResizeW = ev.clientX - resizeStart.current.x;
       const dw = ev.clientX - resizeStart.current.x;
-      setWidth(Math.max(200, resizeStart.current.w + dw));
+      const dh = ev.clientY - resizeStart.current.y;
+      setSize({
+        width: Math.max(200, resizeStart.current.w + dw),
+        height: Math.max(150, resizeStart.current.h + dh),
+      });
     };
+
     document.addEventListener('mousemove', trackMove);
     document.addEventListener('mouseup', () => {
       setIsResizing(false);
       document.removeEventListener('mousemove', trackMove);
-      const finalW = Math.max(200, resizeStart.current.w + ((window as any)._lastColResizeW || 0));
-      setWidth(finalW);
-      updateColumn(column.id, { width: finalW });
+      updateColumn(column.id, { width: size.width, height: size.height });
     }, { once: true });
   };
 
@@ -153,21 +125,22 @@ export default function ColumnContainer({ column }: Props) {
     updateColumn(column.id, { sort_order: column.sort_order === 'asc' ? 'desc' : 'asc' });
   };
 
-  // Auto-size column height to fit content
-  const handleAutoSize = () => {
-    // Column auto-sizes via min-height and flex, but we can trigger a re-render
-    // Nothing needed since columns expand downward infinitely
+  const handleLayoutChange = (mode: string) => {
+    updateColumn(column.id, { layout_mode: mode });
+  };
+
+  const handleGridColumnsChange = (num: number) => {
+    updateColumn(column.id, { grid_columns: Math.max(1, Math.min(5, num)) });
   };
 
   // Handle dropping a note into this column (from NoteCard drag)
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    // Figure out drop index based on Y position
     const rect = columnRef.current?.getBoundingClientRect();
     if (!rect) return;
     const y = e.clientY - rect.top;
-    const noteHeight = 210; // approximate
+    const noteHeight = 210;
     const index = Math.max(0, Math.floor(y / noteHeight));
     setDragOverIndex(index);
   };
@@ -184,7 +157,6 @@ export default function ColumnContainer({ column }: Props) {
 
     const dropIndex = dragOverIndex ?? columnNotes.length;
 
-    // Reorder existing notes to make room
     const existingNote = columnNotes.find((n) => n.id === noteId);
     if (existingNote) {
       // Reordering within the same column
@@ -196,7 +168,6 @@ export default function ColumnContainer({ column }: Props) {
     } else {
       // Moving from freeform or another column into this column
       updateNote(noteId, { column_id: column.id, position_in_column: dropIndex } as any);
-      // Shift existing notes
       columnNotes.forEach((n, i) => {
         if (i >= dropIndex) {
           updateNote(n.id, { position_in_column: i + 1 });
@@ -204,6 +175,9 @@ export default function ColumnContainer({ column }: Props) {
       });
     }
   };
+
+  const layoutMode = column.layout_mode || 'freeform';
+  const gridCols = column.grid_columns || 1;
 
   return (
     <div
@@ -214,8 +188,8 @@ export default function ColumnContainer({ column }: Props) {
       style={{
         left: position.x,
         top: position.y,
-        width: width,
-        minHeight: 200,
+        width: size.width,
+        minHeight: size.height,
       }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -223,7 +197,7 @@ export default function ColumnContainer({ column }: Props) {
     >
       {/* Column header */}
       <div
-        className="flex items-center gap-1 px-3 py-2 border-b border-gray-300 dark:border-gray-600 cursor-move select-none bg-gray-200 dark:bg-gray-700 rounded-t-lg"
+        className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-300 dark:border-gray-600 cursor-move select-none bg-gray-200 dark:bg-gray-700 rounded-t-lg"
         onMouseDown={handleDragStart}
       >
         {isEditing ? (
@@ -248,9 +222,38 @@ export default function ColumnContainer({ column }: Props) {
           </span>
         )}
 
+        {/* Layout mode */}
+        <select
+          className="text-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-0.5 py-0.5 cursor-pointer"
+          value={layoutMode}
+          onChange={(e) => handleLayoutChange(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          title="Layout mode"
+        >
+          <option value="freeform">Free</option>
+          <option value="grid">Grid</option>
+        </select>
+
+        {/* Grid columns selector (only visible in grid mode) */}
+        {layoutMode === 'grid' && (
+          <select
+            className="text-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-0.5 py-0.5 cursor-pointer"
+            value={gridCols}
+            onChange={(e) => handleGridColumnsChange(Number(e.target.value))}
+            onClick={(e) => e.stopPropagation()}
+            title="Grid columns"
+          >
+            <option value={1}>1 col</option>
+            <option value={2}>2 col</option>
+            <option value={3}>3 col</option>
+            <option value={4}>4 col</option>
+            <option value={5}>5 col</option>
+          </select>
+        )}
+
         {/* Sort controls */}
         <select
-          className="text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-1 py-0.5 cursor-pointer"
+          className="text-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-0.5 py-0.5 cursor-pointer"
           value={column.sort_by}
           onChange={(e) => handleSortChange(e.target.value)}
           onClick={(e) => e.stopPropagation()}
@@ -270,7 +273,7 @@ export default function ColumnContainer({ column }: Props) {
         </button>
 
         <button
-          className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-lg leading-none px-1"
+          className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm leading-none px-0.5"
           onClick={(e) => { e.stopPropagation(); handleAddNoteToColumn(); }}
           title="Add note to column"
         >
@@ -278,7 +281,7 @@ export default function ColumnContainer({ column }: Props) {
         </button>
 
         <button
-          className="text-red-400 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 text-xs px-1"
+          className="text-red-400 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 text-xs px-0.5"
           onClick={(e) => {
             e.stopPropagation();
             if (confirm('Delete column? Notes will become freeform.')) deleteColumn(column.id);
@@ -290,9 +293,16 @@ export default function ColumnContainer({ column }: Props) {
       </div>
 
       {/* Column notes area */}
-      <div className="flex flex-col gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-b-lg min-h-[100px]">
+      <div
+        className={`flex-1 p-2 bg-gray-100 dark:bg-gray-800 rounded-b-lg overflow-y-auto ${
+          layoutMode === 'grid'
+            ? 'grid gap-2'
+            : 'flex flex-col gap-2'
+        }`}
+        style={layoutMode === 'grid' ? { gridTemplateColumns: `repeat(${gridCols}, 1fr)` } : {}}
+      >
         {columnNotes.length === 0 && (
-          <div className="text-center text-gray-400 dark:text-gray-500 text-sm py-4">
+          <div className={`text-center text-gray-400 dark:text-gray-500 text-sm py-4 ${layoutMode === 'grid' ? 'col-span-full' : ''}`}>
             Drag notes here
           </div>
         )}
@@ -305,17 +315,18 @@ export default function ColumnContainer({ column }: Props) {
             <NoteCard note={note} inColumn />
           </div>
         ))}
-        {/* Drop indicator at end */}
         {dragOverIndex !== null && dragOverIndex >= columnNotes.length && (
           <div className="h-1 bg-blue-500 rounded-full mt-1" />
         )}
       </div>
 
-      {/* Right edge resize handle */}
+      {/* Diagonal resize handle (bottom-right corner) */}
       <div
-        className="absolute top-0 right-0 w-2 h-full cursor-ew-resize hover:bg-blue-500/20 rounded-r-lg"
+        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-30"
         onMouseDown={handleResizeStart}
-      />
+      >
+        <div className="absolute bottom-1 right-1 w-2 h-2 border-r-2 border-b-2 border-gray-400 dark:border-gray-500" />
+      </div>
     </div>
   );
 }

@@ -32,6 +32,9 @@ export interface Column {
   x: number;
   y: number;
   width: number;
+  height: number;
+  layout_mode: string;
+  grid_columns: number;
   sort_by: string;
   sort_order: string;
   created_at: string;

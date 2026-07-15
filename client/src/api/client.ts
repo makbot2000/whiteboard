@@ -24,6 +24,8 @@ export const api = {
     update: (id: string, data: any) => request(`/notes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => request(`/notes/${id}`, { method: 'DELETE' }),
     batchPositions: (updates: any[]) => request('/notes/batch/positions', { method: 'PUT', body: JSON.stringify({ updates }) }),
+    copy: (id: string, targetBoardId: string) => request(`/notes/${id}/copy`, { method: 'POST', body: JSON.stringify({ target_board_id: targetBoardId }) }),
+    move: (id: string, targetBoardId: string) => request(`/notes/${id}/move`, { method: 'POST', body: JSON.stringify({ target_board_id: targetBoardId }) }),
   },
   columns: {
     list: (boardId: string) => request(`/columns?board_id=${boardId}`),
