@@ -44,7 +44,6 @@ export default function ColumnContainer({ column }: Props) {
           ? a.updated_at.localeCompare(b.updated_at)
           : b.updated_at.localeCompare(a.updated_at);
       }
-      // manual: sort by position_in_column
       return (a.position_in_column ?? 0) - (b.position_in_column ?? 0);
     });
 
@@ -112,8 +111,8 @@ export default function ColumnContainer({ column }: Props) {
     createNote({
       column_id: column.id,
       position_in_column: posIndex,
-      x: 0,
-      y: 0,
+      x: 10,
+      y: 10 + posIndex * 50,
     } as any);
   };
 
@@ -133,7 +132,44 @@ export default function ColumnContainer({ column }: Props) {
     updateColumn(column.id, { grid_columns: Math.max(1, Math.min(5, num)) });
   };
 
-  // Handle dropping a note into this column (from NoteCard drag)
+  // Align notes inside this column into a neat grid/stack
+  const handleAlignNotes = () => {
+    const padding = 10;
+    const gridCols = column.grid_columns || 1;
+    const layoutMode = column.layout_mode || 'freeform';
+
+    if (layoutMode === 'freeform') {
+      // Align freeform notes into a vertical stack
+      let currentY = 10;
+      columnNotes.forEach((note, i) => {
+        updateNote(note.id, { x: 10, y: currentY, position_in_column: i });
+        currentY += note.height + padding;
+      });
+    } else if (layoutMode === 'grid') {
+      // Snap into grid
+      const cellWidth = (size.width - padding * (gridCols + 1)) / gridCols;
+      let currentX = padding;
+      let currentY = padding;
+      let maxHeightInRow = 0;
+      let colCount = 0;
+
+      columnNotes.forEach((note, i) => {
+        updateNote(note.id, { x: currentX, y: currentY, position_in_column: i });
+        maxHeightInRow = Math.max(maxHeightInRow, note.height);
+        colCount++;
+        currentX += cellWidth + padding;
+
+        if (colCount >= gridCols) {
+          colCount = 0;
+          currentX = padding;
+          currentY += maxHeightInRow + padding;
+          maxHeightInRow = 0;
+        }
+      });
+    }
+  };
+
+  // Handle dropping a note into this column
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -159,14 +195,12 @@ export default function ColumnContainer({ column }: Props) {
 
     const existingNote = columnNotes.find((n) => n.id === noteId);
     if (existingNote) {
-      // Reordering within the same column
       const reordered = columnNotes.filter((n) => n.id !== noteId);
       reordered.splice(dropIndex, 0, existingNote);
       reordered.forEach((n, i) => {
         updateNote(n.id, { position_in_column: i });
       });
     } else {
-      // Moving from freeform or another column into this column
       updateNote(noteId, { column_id: column.id, position_in_column: dropIndex } as any);
       columnNotes.forEach((n, i) => {
         if (i >= dropIndex) {
@@ -197,12 +231,12 @@ export default function ColumnContainer({ column }: Props) {
     >
       {/* Column header */}
       <div
-        className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-300 dark:border-gray-600 cursor-move select-none bg-gray-200 dark:bg-gray-700 rounded-t-lg"
+        className="flex items-center gap-2 px-3 py-2 border-b border-gray-300 dark:border-gray-600 cursor-move select-none bg-gray-200 dark:bg-gray-700 rounded-t-lg"
         onMouseDown={handleDragStart}
       >
         {isEditing ? (
           <input
-            className="flex-1 bg-white dark:bg-gray-800 border border-gray-400 dark:border-gray-500 rounded px-1 py-0.5 text-sm text-gray-900 dark:text-gray-100"
+            className="flex-1 bg-white dark:bg-gray-800 border border-gray-400 dark:border-gray-500 rounded px-2 py-1 text-sm text-gray-900 dark:text-gray-100"
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             onBlur={handleRename}
@@ -222,9 +256,18 @@ export default function ColumnContainer({ column }: Props) {
           </span>
         )}
 
+        {/* Align button */}
+        <button
+          className="text-sm text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 px-1"
+          onClick={(e) => { e.stopPropagation(); handleAlignNotes(); }}
+          title="Align notes inside column"
+        >
+          Align
+        </button>
+
         {/* Layout mode */}
         <select
-          className="text-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-0.5 py-0.5 cursor-pointer"
+          className="text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-1 py-0.5 cursor-pointer"
           value={layoutMode}
           onChange={(e) => handleLayoutChange(e.target.value)}
           onClick={(e) => e.stopPropagation()}
@@ -234,10 +277,10 @@ export default function ColumnContainer({ column }: Props) {
           <option value="grid">Grid</option>
         </select>
 
-        {/* Grid columns selector (only visible in grid mode) */}
+        {/* Grid columns selector */}
         {layoutMode === 'grid' && (
           <select
-            className="text-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-0.5 py-0.5 cursor-pointer"
+            className="text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-1 py-0.5 cursor-pointer"
             value={gridCols}
             onChange={(e) => handleGridColumnsChange(Number(e.target.value))}
             onClick={(e) => e.stopPropagation()}
@@ -253,7 +296,7 @@ export default function ColumnContainer({ column }: Props) {
 
         {/* Sort controls */}
         <select
-          className="text-[10px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-0.5 py-0.5 cursor-pointer"
+          className="text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-1 py-0.5 cursor-pointer"
           value={column.sort_by}
           onChange={(e) => handleSortChange(e.target.value)}
           onClick={(e) => e.stopPropagation()}
@@ -265,7 +308,7 @@ export default function ColumnContainer({ column }: Props) {
         </select>
 
         <button
-          className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-0.5"
+          className="text-sm text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white px-1"
           onClick={(e) => { e.stopPropagation(); toggleSortOrder(); }}
           title={`Sort ${column.sort_order === 'asc' ? 'ascending' : 'descending'}`}
         >
@@ -273,22 +316,22 @@ export default function ColumnContainer({ column }: Props) {
         </button>
 
         <button
-          className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm leading-none px-0.5"
+          className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 px-1"
           onClick={(e) => { e.stopPropagation(); handleAddNoteToColumn(); }}
           title="Add note to column"
         >
-          +
+          + Add
         </button>
 
         <button
-          className="text-red-400 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 text-xs px-0.5"
+          className="text-sm text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 px-1"
           onClick={(e) => {
             e.stopPropagation();
             if (confirm('Delete column? Notes will become freeform.')) deleteColumn(column.id);
           }}
           title="Delete column"
         >
-          x
+          Delete
         </button>
       </div>
 
@@ -301,8 +344,7 @@ export default function ColumnContainer({ column }: Props) {
             ? 'relative'
             : 'flex flex-col gap-2 overflow-y-auto'
         }`}
-        style={layoutMode === 'grid' ? { gridTemplateColumns: `repeat(${gridCols}, 1fr)` } : {}}
-        onDragOver={layoutMode !== 'freeform' ? undefined : (e) => { e.preventDefault(); }}
+        style={layoutMode === 'grid' ? { gridTemplateColumns: `repeat(${gridCols}, 1fr)`, alignContent: 'start' } : {}}
       >
         {columnNotes.length === 0 && (
           <div className={`text-center text-gray-400 dark:text-gray-500 text-sm py-4 ${layoutMode === 'grid' ? 'col-span-full' : ''}`}>
@@ -310,12 +352,19 @@ export default function ColumnContainer({ column }: Props) {
           </div>
         )}
         {layoutMode === 'freeform' ? (
-          // Freeform: notes are absolutely positioned inside the column
           columnNotes.map((note) => (
             <NoteCard key={note.id} note={note} inColumn inFreeformColumn />
           ))
+        ) : layoutMode === 'grid' ? (
+          columnNotes.map((note, index) => (
+            <div key={note.id} className="min-h-0">
+              {dragOverIndex === index && (
+                <div className="h-1 bg-blue-500 rounded-full mb-1" />
+              )}
+              <NoteCard note={note} inColumn inGridColumn />
+            </div>
+          ))
         ) : (
-          // Grid or stacked: notes flow in layout
           columnNotes.map((note, index) => (
             <div key={note.id}>
               {dragOverIndex === index && (
@@ -332,10 +381,10 @@ export default function ColumnContainer({ column }: Props) {
 
       {/* Diagonal resize handle (bottom-right corner) */}
       <div
-        className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-30"
+        className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-30"
         onMouseDown={handleResizeStart}
       >
-        <div className="absolute bottom-1 right-1 w-2 h-2 border-r-2 border-b-2 border-gray-400 dark:border-gray-500" />
+        <div className="absolute bottom-1.5 right-1.5 w-3 h-3 border-r-2 border-b-2 border-gray-400 dark:border-gray-500" />
       </div>
     </div>
   );

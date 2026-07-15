@@ -7,9 +7,10 @@ interface Props {
   note: Note;
   inColumn?: boolean;
   inFreeformColumn?: boolean;
+  inGridColumn?: boolean;
 }
 
-export default function NoteCard({ note, inColumn = false, inFreeformColumn = false }: Props) {
+export default function NoteCard({ note, inColumn = false, inFreeformColumn = false, inGridColumn = false }: Props) {
   const { updateNote, deleteNote, groups, columns, boards, activeBoard, copyNote, moveNote } = useBoardStore();
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -169,14 +170,19 @@ export default function NoteCard({ note, inColumn = false, inFreeformColumn = fa
     <div
       ref={cardRef}
       data-note-id={note.id}
-      draggable={inColumn && !inFreeformColumn}
-      onDragStart={inColumn && !inFreeformColumn ? handleNativeDragStart : undefined}
+      draggable={inColumn && !inFreeformColumn && !inGridColumn}
+      onDragStart={inColumn && !inFreeformColumn && !inGridColumn ? handleNativeDragStart : undefined}
       className={`rounded-lg shadow-lg border bg-white dark:bg-gray-800 flex flex-col ${
         isDragging ? 'opacity-80 shadow-2xl z-50' : 'z-10'
-      } ${isResizing ? 'select-none' : ''} ${inColumn && !inFreeformColumn ? 'relative cursor-grab' : inColumn && inFreeformColumn ? 'absolute' : 'absolute'}`}
+      } ${isResizing ? 'select-none' : ''} ${
+        inGridColumn ? 'relative' :
+        inColumn && !inFreeformColumn ? 'relative cursor-grab' :
+        inFreeformColumn ? 'absolute' :
+        'absolute'
+      }`}
       style={{
-        ...(inColumn && !inFreeformColumn ? {} : { left: position.x, top: position.y }),
-        width: inColumn && !inFreeformColumn ? '100%' : size.width,
+        ...(inGridColumn ? {} : inColumn && !inFreeformColumn ? {} : { left: position.x, top: position.y }),
+        width: inGridColumn ? '100%' : inColumn && !inFreeformColumn ? '100%' : size.width,
         height: size.height,
         borderColor: borderColor || (isDragging ? '#3b82f6' : undefined),
         borderWidth: borderColor ? 2 : undefined,
