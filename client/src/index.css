@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.tiptap {
+  outline: none;
+  min-height: 60px;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.tiptap p {
+  margin: 0.25em 0;
+}
+
+.tiptap ul, .tiptap ol {
+  padding-left: 1.5em;
+  margin: 0.25em 0;
+}
+
+.tiptap h1 { font-size: 1.5em; font-weight: 700; margin: 0.25em 0; }
+.tiptap h2 { font-size: 1.25em; font-weight: 600; margin: 0.25em 0; }
+.tiptap h3 { font-size: 1.1em; font-weight: 600; margin: 0.25em 0; }
+
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #9ca3af;
+  pointer-events: none;
+  height: 0;
+}
+
+/* Canvas cursor */
+.canvas-panning {
+  cursor: grabbing !important;
+}
+
+/* Note card resize handle */
+.resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #9ca3af;
+  border-bottom: 2px solid #9ca3af;
+}
+
+/* Scrollbar styling for note cards */
+.note-content::-webkit-scrollbar {
+  width: 6px;
+}
+.note-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.note-content::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+.dark .note-content::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
