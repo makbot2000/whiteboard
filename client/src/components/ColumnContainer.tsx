@@ -248,34 +248,30 @@ export default function ColumnContainer({ column }: Props) {
           Align
         </button>
 
-        {/* Layout mode */}
+        {/* Layout mode - combined dropdown */}
         <select
           className="text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-1 py-0.5 cursor-pointer"
-          value={layoutMode}
-          onChange={(e) => handleLayoutChange(e.target.value)}
+          value={layoutMode === 'grid' ? `grid-${gridCols}` : 'freeform'}
+          onChange={(e) => {
+            e.stopPropagation();
+            const val = e.target.value;
+            if (val === 'freeform') {
+              handleLayoutChange('freeform');
+            } else {
+              const cols = parseInt(val.split('-')[1]);
+              handleLayoutChange('grid');
+              handleGridColumnsChange(cols);
+            }
+          }}
           onClick={(e) => e.stopPropagation()}
           title="Layout mode"
         >
           <option value="freeform">Free</option>
-          <option value="grid">Grid</option>
+          <option value="grid-2">Grid 2</option>
+          <option value="grid-3">Grid 3</option>
+          <option value="grid-4">Grid 4</option>
+          <option value="grid-5">Grid 5</option>
         </select>
-
-        {/* Grid columns selector */}
-        {layoutMode === 'grid' && (
-          <select
-            className="text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-500 rounded px-1 py-0.5 cursor-pointer"
-            value={gridCols}
-            onChange={(e) => handleGridColumnsChange(Number(e.target.value))}
-            onClick={(e) => e.stopPropagation()}
-            title="Grid columns"
-          >
-            <option value={1}>1 col</option>
-            <option value={2}>2 col</option>
-            <option value={3}>3 col</option>
-            <option value={4}>4 col</option>
-            <option value={5}>5 col</option>
-          </select>
-        )}
 
         {/* Sort controls */}
         <select
